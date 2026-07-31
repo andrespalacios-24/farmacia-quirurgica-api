@@ -1,12 +1,25 @@
-from motor.motor_asyncio import AsyncIOMotorClient
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
-# 1. Crear el cliente asíncrono usando la URL definida en el .env
-client = AsyncIOMotorClient(settings.MONGODB_URL)
+# 1. Crear el motor asíncrono usando la URL de PostgreSQL del .env
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=True  # Muestra los queries SQL en la consola durante desarrollo
+)
 
-# 2. Conectar a la base de datos específica
-database = client[settings.DATABASE_NAME]
+# 2. Crear la fábrica de sesiones asíncronas
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
 
-# 3. Helpers para obtener colecciones específicas
-def get_collection(collection_name: str):
-    return database[collection_name]
+# 3. Clase Base para definir todos tus modelos (tablas) en app/models
+class Base(DeclarativeBase):
+    pass
+
+# 4. Dependencia para inyectar la sesión de la BD en las rutas de FastAPI
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
