@@ -52,10 +52,10 @@ ROLES_BASE = {
 
 # Datos del superusuario fundador
 ADMIN_USER = {
+    "username": "admin_principal", # Añadido para coincidir con tu modelo
     "email": "admin@farmacia.quirurgica",
     "nombre_completo": "Administrador Principal",
-    # NOTA: En un entorno real, esta clave debería venir de tu archivo .env
-    "password_plana": "Cirugia2026*" 
+    "password_plana": "Cirugia2026*"
 }
 
 # ==========================================
@@ -130,11 +130,12 @@ async def seed_admin(session: AsyncSession):
         # 2. Hasheamos la contraseña de forma segura
         hashed_password = password_hash.hash(ADMIN_USER["password_plana"])
         
-        # 3. Creamos el usuario
+       # 3. Creamos el usuario con los atributos correctos del modelo
         nuevo_admin = Usuario(
+            username=ADMIN_USER["username"],
             email=ADMIN_USER["email"],
             nombre_completo=ADMIN_USER["nombre_completo"],
-            password=hashed_password,  # Guardamos el hash, NUNCA la contraseña plana
+            hashed_password=hashed_password,  # <-- CORREGIDO AQUÍ
             activo=True
         )
         
