@@ -113,3 +113,4 @@ class Usuario(Base):
     )
     def __repr__(self) -> str:
         return f"<Usuario(username='{self.username}', email='{self.email}')>"
+

@@ -1,4 +1,4 @@
-# app/models/orm/inventario.py
+ # app/models/orm/inventario.py
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, func
