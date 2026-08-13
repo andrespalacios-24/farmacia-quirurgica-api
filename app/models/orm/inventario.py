@@ -43,7 +43,7 @@ class RetiroInsumo(Base):
     insumo_id: Mapped[int] = mapped_column(ForeignKey("insumos.id", ondelete="RESTRICT"), nullable=False)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
     
-    id_quirofano: Mapped[str] = mapped_column(String(50), index=True, nullable=False)  # Ej: "Quirófano 3" o UUID
+    procedimiento_id: Mapped[int] = mapped_column(ForeignKey("procedimientos.id", ondelete="RESTRICT"), nullable=False)
     cantidad_retirada: Mapped[int] = mapped_column(Integer, nullable=False)
     
     fecha_retiro: Mapped[datetime] = mapped_column(

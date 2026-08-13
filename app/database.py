@@ -19,7 +19,3 @@ AsyncSessionLocal = async_sessionmaker(
 class Base(DeclarativeBase):
     pass
 
-# 4. Dependencia para inyectar la sesión de la BD en las rutas de FastAPI
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
