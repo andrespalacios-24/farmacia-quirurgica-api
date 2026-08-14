@@ -2,8 +2,7 @@ from pydantic import BaseModel, ConfigDict
 
 class PacienteBase(BaseModel):
     cedula: str
-    nombres: str
-    apellidos: str
+    nombre_completo: str
 
 class PacienteCreate(PacienteBase):
     pass
