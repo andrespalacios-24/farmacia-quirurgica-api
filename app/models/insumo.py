@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from app.models.common import PyObjectId
-from app.models.usuario import RolUsuario
+from app.models.usuarios import RolUsuario
 
 class DescripcionInsumo(BaseModel):
     uso: str

@@ -6,6 +6,8 @@ from app.database import AsyncSessionLocal # (Ajusta el nombre según como lo te
 
 # Importamos los modelos ORM de tu módulo RBAC
 from app.models.orm.rbac import Permiso, Rol, Usuario
+from app.models.orm.inventario import Insumo
+from app.models.orm.clinica import Paciente
 
 # Inicializamos pwdlib usando su configuración recomendada (típicamente bcrypt)
 password_hash = PasswordHash.recommended()
@@ -57,6 +59,30 @@ ADMIN_USER = {
     "nombre_completo": "Administrador Principal",
     "password_plana": "Cirugia2026*"
 }
+
+PACIENTES_BASE = [
+    {
+        "cedula": "100200300", 
+        "nombre_completo": "Paciente Trauma Uno"
+    },
+    {
+        "cedula": "400500600", 
+        "nombre_completo": "Paciente Apendicectomía Dos"
+    }
+]
+
+INSUMOS_BASE = [
+    {
+        "codigo_barras": "SUT-VIC-01",
+        "nombre": "Sutura Vicryl 1 CT-1",
+        "lote": "L-2026-08A",
+        "stock_actual": 50,
+        "stock_minimo": 10
+    },
+    # ... (y la gasa)
+]
+
+
 
 # ==========================================
 # 2. FUNCIONES DE INSERCIÓN (IDEMPOTENTES)
@@ -153,6 +179,56 @@ async def seed_admin(session: AsyncSession):
         
     await session.commit()
 
+async def seed_insumos(session: AsyncSession):
+    print("--- Ingresando Insumos a la CEYE ---")
+    
+    # 1. Iteramos sobre nuestras cajas de prueba
+    for datos_insumo in INSUMOS_BASE:
+        
+        # 2. Consultamos el estante de acero por el código de barras
+        stmt = select(Insumo).where(Insumo.codigo_barras == datos_insumo["codigo_barras"])
+        resultado = await session.execute(stmt)
+        insumo_existente = resultado.scalar_one_or_none()
+        
+        # 3. Si la caja no está en el estante, la ingresamos
+        if not insumo_existente:
+            # 4. Desempaquetamos el diccionario directo en el modelo ORM
+            nuevo_insumo = Insumo(**datos_insumo)
+            
+            # 5. Colocamos la caja en el estante
+            session.add(nuevo_insumo)
+            print(f"[+] Insumo ingresado: {datos_insumo['nombre']}")
+        else:
+            print(f"[=] Insumo ya en estante: {datos_insumo['nombre']}")
+            
+    # 6. Firmamos la recepción oficial en el sistema
+    await session.commit()
+
+async def seed_pacientes(session: AsyncSession):
+    print("--- Abriendo Admisiones: Ingresando Pacientes Base ---")
+    
+    # 1. Tomamos nuestra libreta de apuntes (PACIENTES_BASE) y leemos paciente por paciente
+    for datos_paciente in PACIENTES_BASE:
+        
+        # 2. Vamos al archivo del hospital y buscamos si ya existe la cédula
+        stmt = select(Paciente).where(Paciente.cedula == datos_paciente["cedula"])
+        resultado = await session.execute(stmt)
+        paciente_existente = resultado.scalar_one_or_none()
+        
+        # 3. Si el paciente es nuevo (no existe)
+        if not paciente_existente:
+            # Creamos la carpeta oficial del hospital desempaquetando nuestra libreta (**)
+            nuevo_paciente = Paciente(**datos_paciente)
+            
+            # Ponemos la carpeta en la bandeja del recepcionista
+            session.add(nuevo_paciente)
+            print(f"[+] Paciente admitido: {datos_paciente['nombre_completo']}")
+        else:
+            print(f"[=] Paciente ya tiene historia abierta: {datos_paciente['nombre_completo']}")
+            
+    # 4. El jefe de admisiones firma y guarda todo en el archivo de metal
+    await session.commit()
+
 # ==========================================
 # 3. BLOQUE DE EJECUCIÓN PRINCIPAL
 # ==========================================
@@ -164,7 +240,10 @@ async def run_seed():
         await seed_permisos(session)
         await seed_roles(session)
         await seed_admin(session)
+        await seed_pacientes(session)
+        await seed_insumos(session)
     print("Proceso de Seeding finalizado con éxito.")
 
 if __name__ == "__main__":
     asyncio.run(run_seed())
+

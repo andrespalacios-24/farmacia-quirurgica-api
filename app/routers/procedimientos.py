@@ -36,10 +36,15 @@ async def registrar_procedimiento(
     # 3. Ejecutar la acción y guardar (Incisión y sutura)
     db.add(nuevo_procedimiento)
     await db.commit()
-    await db.refresh(nuevo_procedimiento)
+    
+    # --- EL CAMBIO OCURRE AQUÍ ---
+    # En lugar del refresh, solicitamos el expediente completo con selectinload
+    consulta_post_operatoria = select(Procedimiento).where(Procedimiento.id == nuevo_procedimiento.id).options(selectinload(Procedimiento.paciente))
+    resultado_final = await db.execute(consulta_post_operatoria)
+    procedimiento_completo = resultado_final.scalar_one()
     
     # 4. Entregar el reporte final
-    return nuevo_procedimiento
+    return procedimiento_completo
 
 # -------------------------------------------------------------------
 # GET: Listar todos los procedimientos (La Pizarra del Quirófano)
