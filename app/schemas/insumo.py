@@ -1,6 +1,6 @@
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from enum import Enum
 
 
@@ -22,6 +22,11 @@ class InsumoCreate(InsumoBase):
 class InsumoResponse(InsumoBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def es_critico(self) -> bool:
+        return self.stock_actual <= self.stock_minimo
 
 
 # -------------------------------------------------------------------

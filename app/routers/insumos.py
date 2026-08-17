@@ -70,15 +70,23 @@ async def procesar_retiro(
 # -------------------------------------------------------------------
 @router.get("/", response_model=list[InsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_kardex(
+    bajo_stock: bool = False,
     db: AsyncSession = Depends(get_db)
 ):
-    # 1. Consultar todos los insumos disponibles en la base de datos
-    resultado = await db.execute(select(Insumo))
-    
-    # 2. Desempaquetar los resultados ORM en una lista de objetos
+    # 1. Construir la consulta base (todos los insumos)
+    consulta = select(Insumo)
+
+    # 2. Si se pide el filtro, aplicar la condición de stock crítico
+    if bajo_stock:
+        consulta = consulta.where(Insumo.stock_actual <= Insumo.stock_minimo)
+
+    # 3. Ejecutar la consulta asíncrona
+    resultado = await db.execute(consulta)
+
+    # 4. Desempaquetar los resultados ORM en una lista
     insumos = resultado.scalars().all()
-    
-    # 3. Retornar la lista para ser serializada por FastAPI
+
+    # 5. Retornar la lista para ser serializada por FastAPI
     return insumos
 
 # -------------------------------------------------------------------
