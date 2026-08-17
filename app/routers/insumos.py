@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
 from app.models.orm.inventario import Insumo, RetiroInsumo, DevolucionInsumo
@@ -10,6 +11,7 @@ from app.schemas.insumo import (
     DevolucionInsumoCreate,
     DevolucionInsumoResponse,
     EstadoInsumo,
+    RetiroInsumoResponse,
 )
 
 # Definimos el router (Nuestra ventanilla de farmacia)
@@ -133,7 +135,61 @@ async def registrar_devolucion(
     # 6. Suturar y cerrar (guardar cambios en la base de datos)
     db.add(nueva_devolucion)
     await db.commit()
-    await db.refresh(nueva_devolucion)
 
-    # 7. Entregar el comprobante al usuario
-    return nueva_devolucion
+    # 7. Re-consultar con carga ansiosa para armar el comprobante completo
+    consulta_completa = select(DevolucionInsumo).where(
+        DevolucionInsumo.id == nueva_devolucion.id
+    ).options(
+        selectinload(DevolucionInsumo.usuario_recibe),
+        selectinload(DevolucionInsumo.retiro).selectinload(RetiroInsumo.insumo),
+    )
+    resultado_final = await db.execute(consulta_completa)
+    devolucion_completa = resultado_final.scalar_one()
+
+    # 8. Entregar el comprobante al usuario
+    return devolucion_completa
+
+# -------------------------------------------------------------------
+# GET: Historial de retiros (Libro de movimientos de salida)
+# -------------------------------------------------------------------
+@router.get("/retiros", response_model=list[RetiroInsumoResponse], status_code=status.HTTP_200_OK)
+async def listar_retiros(
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Consultar retiros con carga ansiosa de sus relaciones
+    consulta = select(RetiroInsumo).options(
+        selectinload(RetiroInsumo.insumo),
+        selectinload(RetiroInsumo.usuario),
+        selectinload(RetiroInsumo.procedimiento),
+    )
+
+    # 2. Ejecutar la consulta asíncrona
+    resultado = await db.execute(consulta)
+
+    # 3. Extraer los objetos ORM en una lista
+    retiros = resultado.scalars().all()
+
+    # 4. Retornar la lista (FastAPI la serializa con RetiroInsumoResponse)
+    return retiros
+
+# -------------------------------------------------------------------
+# GET: Historial de devoluciones (Libro de movimientos de retorno)
+# -------------------------------------------------------------------
+@router.get("/devoluciones", response_model=list[DevolucionInsumoResponse], status_code=status.HTTP_200_OK)
+async def listar_devoluciones(
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Consultar devoluciones con carga ansiosa en cadena
+    consulta = select(DevolucionInsumo).options(
+        selectinload(DevolucionInsumo.usuario_recibe),
+        selectinload(DevolucionInsumo.retiro).selectinload(RetiroInsumo.insumo),
+    )
+
+    # 2. Ejecutar la consulta asíncrona
+    resultado = await db.execute(consulta)
+
+    # 3. Extraer los objetos ORM en una lista
+    devoluciones = resultado.scalars().all()
+
+    # 4. Retornar la lista (FastAPI la serializa con DevolucionInsumoResponse)
+    return devoluciones
