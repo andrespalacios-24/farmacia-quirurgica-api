@@ -1,11 +1,13 @@
  # app/models/orm/inventario.py
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime
 from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 from app.models.orm.rbac import Usuario
 
+if TYPE_CHECKING:
+    from app.models.orm.clinica import Procedimiento
 
 class Insumo(Base):
     """
@@ -57,6 +59,7 @@ class RetiroInsumo(Base):
     insumo: Mapped["Insumo"] = relationship("Insumo", back_populates="retiros")
     usuario: Mapped["Usuario"] = relationship("Usuario", back_populates="retiros_realizados")
     devoluciones: Mapped[List["DevolucionInsumo"]] = relationship("DevolucionInsumo", back_populates="retiro")
+    procedimiento: Mapped["Procedimiento"] = relationship("Procedimiento", back_populates="retiros")
 
     def __repr__(self) -> str:
         return f"<RetiroInsumo(id={self.id}, insumo_id={self.insumo_id}, cantidad={self.cantidad_retirada})>"

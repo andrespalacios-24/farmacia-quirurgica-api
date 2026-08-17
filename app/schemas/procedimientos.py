@@ -1,10 +1,16 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
+from enum import Enum
+
+class Quirofano(str, Enum):
+    QUIROFANO_1 = "Quirófano 1"
+    QUIROFANO_2 = "Quirófano 2"
+    QUIROFANO_3 = "Quirófano 3"  
 
 # 1. Nuestro "Equipo Básico"
 class ProcedimientoBase(BaseModel):
     descripcion: str = Field(..., max_length=255, examples=["Apendicectomía", "Colecistectomía Laparoscópica"])
-    quirofano: str = Field(..., max_length=50, examples=["Sala 1", "Quirófano Central 3"])
+    quirofano: Quirofano
 
 # 2. Lo que pide el cirujano para empezar (Creación)
 class ProcedimientoCreate(ProcedimientoBase):

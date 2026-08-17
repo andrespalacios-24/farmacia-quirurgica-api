@@ -1,9 +1,9 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 
 class UsuarioBase(BaseModel):
-    correo: EmailStr
-    nombres: str
-    apellidos: str
+    username: str
+    email: EmailStr
+    nombre_completo: str
     activo: bool = True
 
 class UsuarioCreate(UsuarioBase):
@@ -11,5 +11,4 @@ class UsuarioCreate(UsuarioBase):
 
 class UsuarioResponse(UsuarioBase):
     id: int
-
     model_config = ConfigDict(from_attributes=True)

@@ -1,8 +1,11 @@
-from typing import List
+from typing import List, TYPE_CHECKING
 from datetime import datetime
 from sqlalchemy import String, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.orm.inventario import RetiroInsumo
 
 class Paciente(Base):
     __tablename__ = "pacientes"
@@ -26,4 +29,4 @@ class Procedimiento(Base):
     
     # Relaciones
     paciente: Mapped["Paciente"] = relationship("Paciente", back_populates="procedimientos")
-    # Nota: En el próximo paso enlazaremos esta tabla con los retiros de farmacia.
+    retiros: Mapped[List["RetiroInsumo"]] = relationship("RetiroInsumo", back_populates="procedimiento")
