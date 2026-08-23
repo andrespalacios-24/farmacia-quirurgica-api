@@ -2,9 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-
-from app.api.deps import get_db
+from app.api.deps import get_current_user, get_db, require_permission
 from app.models.orm.inventario import Insumo, RetiroInsumo, DevolucionInsumo
+from app.models.orm.rbac import Usuario
+
+ 
+
 from app.schemas.insumo import (
     RetiroInsumoCreate,
     InsumoResponse,
@@ -26,7 +29,8 @@ router = APIRouter(
 @router.post("/retiros", status_code=status.HTTP_201_CREATED)
 async def procesar_retiro(
     vale_farmacia: RetiroInsumoCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(require_permission("insumos:retirar")),
 ):
     # 1. Primer 'Time Out': Buscar el insumo en el estante
     resultado_insumo = await db.execute(select(Insumo).where(Insumo.id == vale_farmacia.insumo_id))
@@ -52,7 +56,7 @@ async def procesar_retiro(
     nuevo_retiro = RetiroInsumo(
         insumo_id=vale_farmacia.insumo_id,
         procedimiento_id=vale_farmacia.procedimiento_id,
-        usuario_id=vale_farmacia.usuario_id,
+        usuario_id=usuario.id,
         cantidad_retirada=vale_farmacia.cantidad_retirada,
         observaciones=vale_farmacia.observaciones
     )
@@ -71,7 +75,8 @@ async def procesar_retiro(
 @router.get("/", response_model=list[InsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_kardex(
     bajo_stock: bool = False,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
 ):
     # 1. Construir la consulta base (todos los insumos)
     consulta = select(Insumo)
@@ -95,7 +100,8 @@ async def listar_kardex(
 @router.post("/devoluciones", response_model=DevolucionInsumoResponse, status_code=status.HTTP_201_CREATED)
 async def registrar_devolucion(
     vale_devolucion: DevolucionInsumoCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(require_permission("insumos:devolver"))
 ):
     # 1. Primer 'Time Out': Buscar el retiro original en el libro de movimientos
     resultado_retiro = await db.execute(
@@ -134,7 +140,7 @@ async def registrar_devolucion(
     # 5. Crear el registro inmutable de la devolución
     nueva_devolucion = DevolucionInsumo(
         retiro_id=vale_devolucion.retiro_id,
-        usuario_recibe_id=vale_devolucion.usuario_recibe_id,
+        usuario_recibe_id=usuario.id,
         cantidad_devuelta=vale_devolucion.cantidad_devuelta,
         estado_insumo=vale_devolucion.estado_insumo,
         observaciones=vale_devolucion.observaciones
@@ -162,7 +168,8 @@ async def registrar_devolucion(
 # -------------------------------------------------------------------
 @router.get("/retiros", response_model=list[RetiroInsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_retiros(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
 ):
     # 1. Consultar retiros con carga ansiosa de sus relaciones
     consulta = select(RetiroInsumo).options(
@@ -185,7 +192,8 @@ async def listar_retiros(
 # -------------------------------------------------------------------
 @router.get("/devoluciones", response_model=list[DevolucionInsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_devoluciones(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
 ):
     # 1. Consultar devoluciones con carga ansiosa en cadena
     consulta = select(DevolucionInsumo).options(

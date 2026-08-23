@@ -35,8 +35,7 @@ class InsumoResponse(InsumoBase):
 
 class RetiroInsumoCreate(BaseModel):
     insumo_id: int
-    procedimiento_id: int
-    usuario_id: int           
+    procedimiento_id: int           
     cantidad_retirada: int
     observaciones: Optional[str] = None
 
@@ -51,7 +50,6 @@ class EstadoInsumo(str, Enum):
 
 class DevolucionInsumoCreate(BaseModel):
     retiro_id: int
-    usuario_recibe_id: int
     cantidad_devuelta: int = Field(..., gt=0)
     estado_insumo: EstadoInsumo
     observaciones: Optional[str] = None
