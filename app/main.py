@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from app.config import settings
 from app.routers import pacientes, procedimientos
 from app.routers import insumos
+from app.routers import auth
+from app.routers import usuarios
 
 # 1. Creación de la instancia principal de FastAPI
 app = FastAPI(
@@ -13,6 +15,8 @@ app = FastAPI(
 app.include_router(pacientes.router)
 app.include_router(procedimientos.router) 
 app.include_router(insumos.router)
+app.include_router(auth.router)
+app.include_router(usuarios.router)
 
 # 2. Ruta principal (Endpoint de prueba de vida / Health Check)
 @app.get("/")

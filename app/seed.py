@@ -49,7 +49,11 @@ ROLES_BASE = {
         "insumos:retirar", 
         "insumos:devolver",
         "reportes:leer"
-    ]
+    ],
+    "CIRCULANTE": [
+    "insumos:retirar",
+    "insumos:devolver"
+    ]   
 }
 
 # Datos del superusuario fundador
