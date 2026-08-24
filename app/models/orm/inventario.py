@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 class Insumo(Base):
     """
-    Representa el inventario de insumos o medicamentos quirúrgicos.
+    Representa el producto o insumo (su identidad), sin stock ni lote.
     """
     __tablename__ = "insumos"
 
@@ -19,20 +19,36 @@ class Insumo(Base):
     codigo_barras: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     nombre: Mapped[str] = mapped_column(String(150), index=True, nullable=False)
     descripcion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
-    stock_actual: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    stock_minimo: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
-    
-    unidad_medida: Mapped[str] = mapped_column(String(30), default="Unidad", nullable=False)  # Ej: "Caja", "Ampolla", "Unidad"
-    lote: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    fecha_vencimiento: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Relación 1:N con Retiros
+    stock_minimo: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    unidad_medida: Mapped[str] = mapped_column(String(30), default="Unidad", nullable=False)  # Ej: "Caja", "Ampolla", "Unidad"
+
+    # Relaciones
     retiros: Mapped[List["RetiroInsumo"]] = relationship("RetiroInsumo", back_populates="insumo")
+    lotes: Mapped[List["Lote"]] = relationship("Lote", back_populates="insumo")
 
     def __repr__(self) -> str:
-        return f"<Insumo(nombre='{self.nombre}', stock={self.stock_actual})>"
+        return f"<Insumo(nombre='{self.nombre}', codigo='{self.codigo_barras}')>"
 
+class Lote(Base):
+    """
+    Representa una partida/remesa de un insumo, con su stock y vencimiento.
+    """
+    __tablename__ = "lotes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    insumo_id: Mapped[int] = mapped_column(ForeignKey("insumos.id", ondelete="RESTRICT"), nullable=False)
+    numero_lote: Mapped[str] = mapped_column(String(50), nullable=False)
+    fecha_vencimiento: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    stock_actual: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Relaciones
+    insumo: Mapped["Insumo"] = relationship("Insumo", back_populates="lotes")
+    retiros: Mapped[List["RetiroInsumo"]] = relationship("RetiroInsumo", back_populates="lote")
+
+    def __repr__(self) -> str:
+        return f"<Lote(id={self.id}, lote='{self.numero_lote}', stock={self.stock_actual})>"
 
 class RetiroInsumo(Base):
     """
@@ -43,6 +59,7 @@ class RetiroInsumo(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     
     insumo_id: Mapped[int] = mapped_column(ForeignKey("insumos.id", ondelete="RESTRICT"), nullable=False)
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
     
     procedimiento_id: Mapped[int] = mapped_column(ForeignKey("procedimientos.id", ondelete="RESTRICT"), nullable=False)
@@ -57,6 +74,7 @@ class RetiroInsumo(Base):
 
     # Relaciones ORM
     insumo: Mapped["Insumo"] = relationship("Insumo", back_populates="retiros")
+    lote: Mapped["Lote"] = relationship("Lote", back_populates="retiros")
     usuario: Mapped["Usuario"] = relationship("Usuario", back_populates="retiros_realizados")
     devoluciones: Mapped[List["DevolucionInsumo"]] = relationship("DevolucionInsumo", back_populates="retiro")
     procedimiento: Mapped["Procedimiento"] = relationship("Procedimiento", back_populates="retiros")

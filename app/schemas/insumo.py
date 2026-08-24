@@ -8,34 +8,47 @@ class InsumoBase(BaseModel):
     codigo_barras: str = Field(..., max_length=100)
     nombre: str = Field(..., max_length=150)
     descripcion: Optional[str] = None
-    
-    stock_actual: int = Field(default=0, ge=0) # ge=0 impide que haya stock negativo
+
     stock_minimo: int = Field(default=5, ge=0)
-    
     unidad_medida: str = Field(default="Unidad", max_length=30)
-    lote: Optional[str] = Field(default=None, max_length=50)
-    fecha_vencimiento: Optional[datetime] = None
 
 class InsumoCreate(InsumoBase):
     pass
 
+class LoteBase(BaseModel):
+    numero_lote: str = Field(..., max_length=50)
+    fecha_vencimiento: Optional[datetime] = None
+    stock_actual: int = Field(default=0, ge=0)
+
+class LoteCreate(LoteBase):
+    insumo_id: int
+
+class LoteResumen(LoteBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
 class InsumoResponse(InsumoBase):
     id: int
+    lotes: list[LoteResumen] = []
     model_config = ConfigDict(from_attributes=True)
 
     @computed_field
     @property
-    def es_critico(self) -> bool:
-        return self.stock_actual <= self.stock_minimo
+    def stock_actual(self) -> int:
+        return sum(lote.stock_actual for lote in self.lotes)
 
+    @computed_field
+    @property
+    def es_critico(self) -> bool:
+        return sum(lote.stock_actual for lote in self.lotes) <= self.stock_minimo
 
 # -------------------------------------------------------------------
 # Bandejas para el flujo de inventario (La hoja de gastos)
 # -------------------------------------------------------------------
 
 class RetiroInsumoCreate(BaseModel):
-    insumo_id: int
-    procedimiento_id: int           
+    lote_id: int
+    procedimiento_id: int
     cantidad_retirada: int
     observaciones: Optional[str] = None
 
@@ -86,16 +99,17 @@ class RetiroResumen(BaseModel):
     insumo: InsumoResumen
     model_config = ConfigDict(from_attributes=True)
 
-
 class RetiroInsumoResponse(BaseModel):
     id: int
     insumo_id: int
+    lote_id: int
     usuario_id: int
     procedimiento_id: int
     cantidad_retirada: int
     fecha_retiro: datetime
     observaciones: Optional[str] = None
     insumo: InsumoResumen
+    lote: LoteResumen
     usuario: UsuarioResumen
     procedimiento: ProcedimientoResumen
     model_config = ConfigDict(from_attributes=True)

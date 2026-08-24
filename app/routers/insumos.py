@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user, get_db, require_permission
-from app.models.orm.inventario import Insumo, RetiroInsumo, DevolucionInsumo
+from app.models.orm.inventario import Insumo, RetiroInsumo, DevolucionInsumo, Lote
 from app.models.orm.rbac import Usuario
 
  
@@ -16,6 +16,8 @@ from app.schemas.insumo import (
     DevolucionInsumoResponse,
     EstadoInsumo,
     RetiroInsumoResponse,
+    LoteCreate,
+    LoteResumen,
 )
 
 # Definimos el router (Nuestra ventanilla de farmacia)
@@ -33,41 +35,44 @@ async def procesar_retiro(
     db: AsyncSession = Depends(get_db),
     usuario: Usuario = Depends(require_permission("insumos:retirar")),
 ):
-    # 1. Primer 'Time Out': Buscar el insumo en el estante
-    resultado_insumo = await db.execute(select(Insumo).where(Insumo.id == vale_farmacia.insumo_id))
-    insumo_db = resultado_insumo.scalar_one_or_none()
+    # 1. Buscar el lote en el estante
+    resultado_lote = await db.execute(
+        select(Lote).where(Lote.id == vale_farmacia.lote_id)
+    )
+    lote_db = resultado_lote.scalar_one_or_none()
 
-    if not insumo_db:
+    if not lote_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Error: El insumo solicitado no existe en la central."
+            detail="Error: El lote indicado no existe."
         )
-    
-    # 2. Segundo 'Time Out': Verificar la cantidad (¿Hay suficiente material?)
-    if insumo_db.stock_actual < vale_farmacia.cantidad_retirada:
+
+    # 2. Verificar la cantidad en ese lote
+    if lote_db.stock_actual < vale_farmacia.cantidad_retirada:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Stock insuficiente. Solo hay {insumo_db.stock_actual} unidades disponibles."
+            detail=f"Stock insuficiente en el lote. Solo hay {lote_db.stock_actual} unidades."
         )
-        
-    # 3. La incisión (Descontar el inventario físico de la caja)
-    insumo_db.stock_actual -= vale_farmacia.cantidad_retirada
-    
-    # 4. El registro oficial (Crear el movimiento inmutable)
+
+    # 3. Descontar del lote
+    lote_db.stock_actual -= vale_farmacia.cantidad_retirada
+
+    # 4. Crear el registro inmutable (insumo se deriva del lote)
     nuevo_retiro = RetiroInsumo(
-        insumo_id=vale_farmacia.insumo_id,
+        insumo_id=lote_db.insumo_id,
+        lote_id=lote_db.id,
         procedimiento_id=vale_farmacia.procedimiento_id,
         usuario_id=usuario.id,
         cantidad_retirada=vale_farmacia.cantidad_retirada,
         observaciones=vale_farmacia.observaciones
     )
-    
-    # 5. Suturar y cerrar (Guardar ambos cambios en la base de datos)
+
+    # 5. Guardar
     db.add(nuevo_retiro)
     await db.commit()
     await db.refresh(nuevo_retiro)
-    
-    # 6. Entregar el comprobante al usuario
+
+    # 6. Entregar el comprobante
     return nuevo_retiro
 
 # -------------------------------------------------------------------
@@ -79,20 +84,18 @@ async def listar_kardex(
     db: AsyncSession = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    # 1. Construir la consulta base (todos los insumos)
-    consulta = select(Insumo)
-
-    # 2. Si se pide el filtro, aplicar la condición de stock crítico
-    if bajo_stock:
-        consulta = consulta.where(Insumo.stock_actual <= Insumo.stock_minimo)
-
-    # 3. Ejecutar la consulta asíncrona
+    # 1. Cargar todos los insumos con sus lotes
+    consulta = select(Insumo).options(selectinload(Insumo.lotes))
     resultado = await db.execute(consulta)
-
-    # 4. Desempaquetar los resultados ORM en una lista
     insumos = resultado.scalars().all()
 
-    # 5. Retornar la lista para ser serializada por FastAPI
+    # 2. Si se pide, filtrar críticos en Python (stock = suma de lotes)
+    if bajo_stock:
+        insumos = [
+            i for i in insumos
+            if sum(l.stock_actual for l in i.lotes) <= i.stock_minimo
+        ]
+
     return insumos
 
 # -------------------------------------------------------------------
@@ -117,12 +120,49 @@ async def crear_insumo(
     # 2. Crear el insumo
     nuevo_insumo = Insumo(**datos.model_dump())
 
-    # 3. Guardar y devolver
+    # 3. Guardar
     db.add(nuevo_insumo)
     await db.commit()
-    await db.refresh(nuevo_insumo)
 
-    return nuevo_insumo
+    # 4. Re-consultar con lotes cargados (vacío al inicio)
+    consulta_completa = (
+        select(Insumo)
+        .where(Insumo.id == nuevo_insumo.id)
+        .options(selectinload(Insumo.lotes))
+    )
+    resultado_final = await db.execute(consulta_completa)
+    insumo_completo = resultado_final.scalar_one()
+
+    return insumo_completo
+
+# -------------------------------------------------------------------
+# POST: Ingresar un lote nuevo (alta de mercancía a un insumo)
+# -------------------------------------------------------------------
+@router.post("/lotes", response_model=LoteResumen, status_code=status.HTTP_201_CREATED)
+async def crear_lote(
+    datos: LoteCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(require_permission("insumos:crear")),
+):
+    # 1. Verificar que el insumo (producto) exista
+    resultado = await db.execute(
+        select(Insumo).where(Insumo.id == datos.insumo_id)
+    )
+    if not resultado.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="El insumo indicado no existe.",
+        )
+
+    # 2. Crear el lote
+    nuevo_lote = Lote(**datos.model_dump())
+
+    # 3. Guardar y devolver
+    db.add(nuevo_lote)
+    await db.commit()
+    await db.refresh(nuevo_lote)
+
+    return nuevo_lote
 
 # -------------------------------------------------------------------
 # POST: Registrar una devolución (Reintegrar material al inventario)
@@ -133,9 +173,11 @@ async def registrar_devolucion(
     db: AsyncSession = Depends(get_db),
     usuario: Usuario = Depends(require_permission("insumos:devolver"))
 ):
-    # 1. Primer 'Time Out': Buscar el retiro original en el libro de movimientos
+    # 1. Buscar el retiro original (con su lote cargado)
     resultado_retiro = await db.execute(
-        select(RetiroInsumo).where(RetiroInsumo.id == vale_devolucion.retiro_id)
+        select(RetiroInsumo)
+        .where(RetiroInsumo.id == vale_devolucion.retiro_id)
+        .options(selectinload(RetiroInsumo.lote))
     )
     retiro_db = resultado_retiro.scalar_one_or_none()
 
@@ -145,7 +187,7 @@ async def registrar_devolucion(
             detail="Error: El retiro original no existe en el sistema."
         )
 
-   # 2. Sumar las devoluciones previas de este retiro
+    # 2. Sumar las devoluciones previas de este retiro
     resultado_suma = await db.execute(
         select(func.coalesce(func.sum(DevolucionInsumo.cantidad_devuelta), 0)).where(
             DevolucionInsumo.retiro_id == vale_devolucion.retiro_id
@@ -153,27 +195,16 @@ async def registrar_devolucion(
     )
     ya_devuelto = resultado_suma.scalar() or 0
 
-    # 3. Verificar que el total (previo + nuevo) no supere lo retirado
+    # 3. Verificar que el total no supere lo retirado
     if ya_devuelto + vale_devolucion.cantidad_devuelta > retiro_db.cantidad_retirada:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"La devolución supera lo retirado. Ya devuelto: {ya_devuelto}, retirado: {retiro_db.cantidad_retirada}."
         )
-    # 4. Buscar el insumo asociado al retiro para reintegrar el stock
-    resultado_insumo = await db.execute(
-        select(Insumo).where(Insumo.id == retiro_db.insumo_id)
-    )
-    insumo_db = resultado_insumo.scalar_one_or_none()
 
-    if not insumo_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Error: El insumo asociado al retiro no existe."
-        )
-
-    # 4. Reintegrar el stock solo si el material está Estéril/Intacto
+    # 4. Reintegrar al lote del retiro si está Estéril/Intacto
     if vale_devolucion.estado_insumo == EstadoInsumo.ESTERIL_INTACTO:
-        insumo_db.stock_actual += vale_devolucion.cantidad_devuelta
+        retiro_db.lote.stock_actual += vale_devolucion.cantidad_devuelta
 
     # 5. Crear el registro inmutable de la devolución
     nueva_devolucion = DevolucionInsumo(
@@ -184,11 +215,11 @@ async def registrar_devolucion(
         observaciones=vale_devolucion.observaciones
     )
 
-    # 6. Suturar y cerrar (guardar cambios en la base de datos)
+    # 6. Guardar
     db.add(nueva_devolucion)
     await db.commit()
 
-    # 7. Re-consultar con carga ansiosa para armar el comprobante completo
+    # 7. Re-consultar con carga ansiosa
     consulta_completa = select(DevolucionInsumo).where(
         DevolucionInsumo.id == nueva_devolucion.id
     ).options(
@@ -198,12 +229,13 @@ async def registrar_devolucion(
     resultado_final = await db.execute(consulta_completa)
     devolucion_completa = resultado_final.scalar_one()
 
-    # 8. Entregar el comprobante al usuario
+    # 8. Entregar el comprobante
     return devolucion_completa
 
 # -------------------------------------------------------------------
 # GET: Historial de retiros (Libro de movimientos de salida)
 # -------------------------------------------------------------------
+
 @router.get("/retiros", response_model=list[RetiroInsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_retiros(
     db: AsyncSession = Depends(get_db),
@@ -212,6 +244,7 @@ async def listar_retiros(
     # 1. Consultar retiros con carga ansiosa de sus relaciones
     consulta = select(RetiroInsumo).options(
         selectinload(RetiroInsumo.insumo),
+        selectinload(RetiroInsumo.lote),
         selectinload(RetiroInsumo.usuario),
         selectinload(RetiroInsumo.procedimiento),
     )
@@ -258,7 +291,9 @@ async def buscar_por_codigo(
     usuario: Usuario = Depends(get_current_user),
 ):
     resultado = await db.execute(
-        select(Insumo).where(Insumo.codigo_barras == codigo_barras)
+        select(Insumo)
+        .where(Insumo.codigo_barras == codigo_barras)
+        .options(selectinload(Insumo.lotes))
     )
     insumo = resultado.scalar_one_or_none()
 

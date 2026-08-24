@@ -6,7 +6,7 @@ from app.database import AsyncSessionLocal # (Ajusta el nombre según como lo te
 
 # Importamos los modelos ORM de tu módulo RBAC
 from app.models.orm.rbac import Permiso, Rol, Usuario
-from app.models.orm.inventario import Insumo
+from app.models.orm.inventario import Insumo, Lote
 from app.models.orm.clinica import Paciente
 
 # Inicializamos pwdlib usando su configuración recomendada (típicamente bcrypt)
@@ -79,13 +79,18 @@ INSUMOS_BASE = [
     {
         "codigo_barras": "SUT-VIC-01",
         "nombre": "Sutura Vicryl 1 CT-1",
-        "lote": "L-2026-08A",
-        "stock_actual": 50,
         "stock_minimo": 10
     },
-    # ... (y la gasa)
 ]
 
+LOTES_BASE = [
+    {
+        "codigo_barras": "SUT-VIC-01",
+        "numero_lote": "L-2026-08A",
+        "fecha_vencimiento": None,
+        "stock_actual": 50
+    },
+]
 
 
 # ==========================================
@@ -208,6 +213,41 @@ async def seed_insumos(session: AsyncSession):
     # 6. Firmamos la recepción oficial en el sistema
     await session.commit()
 
+async def seed_lotes(session: AsyncSession):
+    print("--- Ingresando Lotes a la CEYE ---")
+
+    for datos_lote in LOTES_BASE:
+        # 1. Buscar el insumo por su código de barras
+        stmt_insumo = select(Insumo).where(Insumo.codigo_barras == datos_lote["codigo_barras"])
+        resultado_insumo = await session.execute(stmt_insumo)
+        insumo_db = resultado_insumo.scalar_one_or_none()
+
+        if not insumo_db:
+            print(f"[!] Insumo no encontrado para el lote {datos_lote['numero_lote']}")
+            continue
+
+        # 2. Verificar si el lote ya existe
+        stmt_lote = select(Lote).where(
+            (Lote.insumo_id == insumo_db.id) & (Lote.numero_lote == datos_lote["numero_lote"])
+        )
+        resultado_lote = await session.execute(stmt_lote)
+        lote_existente = resultado_lote.scalar_one_or_none()
+
+        # 3. Si no existe, crearlo
+        if not lote_existente:
+            nuevo_lote = Lote(
+                insumo_id=insumo_db.id,
+                numero_lote=datos_lote["numero_lote"],
+                fecha_vencimiento=datos_lote.get("fecha_vencimiento"),
+                stock_actual=datos_lote["stock_actual"],
+            )
+            session.add(nuevo_lote)
+            print(f"[+] Lote ingresado: {datos_lote['numero_lote']}")
+        else:
+            print(f"[=] Lote ya existe: {datos_lote['numero_lote']}")
+
+    await session.commit()
+
 async def seed_pacientes(session: AsyncSession):
     print("--- Abriendo Admisiones: Ingresando Pacientes Base ---")
     
@@ -246,7 +286,9 @@ async def run_seed():
         await seed_admin(session)
         await seed_pacientes(session)
         await seed_insumos(session)
+        await seed_lotes(session)
     print("Proceso de Seeding finalizado con éxito.")
+    
 
 if __name__ == "__main__":
     asyncio.run(run_seed())
