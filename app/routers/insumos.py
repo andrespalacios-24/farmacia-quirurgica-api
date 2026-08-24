@@ -88,6 +88,8 @@ async def procesar_retiro(
 @router.get("/", response_model=list[InsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_kardex(
     bajo_stock: bool = False,
+    skip: int = 0,
+    limit: int = 100,
     db: AsyncSession = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
@@ -103,7 +105,8 @@ async def listar_kardex(
             if sum(l.stock_actual for l in i.lotes) <= i.stock_minimo
         ]
 
-    return insumos
+    # 3. Paginar en Python (después del filtro)
+    return insumos[skip:skip + limit]
 
 # -------------------------------------------------------------------
 # POST: Ingresar un insumo nuevo a la CEYE (alta de mercancía)
@@ -252,16 +255,18 @@ async def registrar_devolucion(
 
 @router.get("/retiros", response_model=list[RetiroInsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_retiros(
+    skip: int = 0,
+    limit: int = 100,
     db: AsyncSession = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    # 1. Consultar retiros con carga ansiosa de sus relaciones
+    # 1. Consultar retiros con carga ansiosa y paginación
     consulta = select(RetiroInsumo).options(
         selectinload(RetiroInsumo.insumo),
         selectinload(RetiroInsumo.lote),
         selectinload(RetiroInsumo.usuario),
         selectinload(RetiroInsumo.procedimiento),
-    )
+    ).offset(skip).limit(limit)
 
     # 2. Ejecutar la consulta asíncrona
     resultado = await db.execute(consulta)
@@ -277,14 +282,16 @@ async def listar_retiros(
 # -------------------------------------------------------------------
 @router.get("/devoluciones", response_model=list[DevolucionInsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_devoluciones(
+    skip: int = 0,
+    limit: int = 100,
     db: AsyncSession = Depends(get_db),
     usuario: Usuario = Depends(get_current_user),
 ):
-    # 1. Consultar devoluciones con carga ansiosa en cadena
+    # 1. Consultar devoluciones con carga ansiosa y paginación
     consulta = select(DevolucionInsumo).options(
         selectinload(DevolucionInsumo.usuario_recibe),
         selectinload(DevolucionInsumo.retiro).selectinload(RetiroInsumo.insumo),
-    )
+    ).offset(skip).limit(limit)
 
     # 2. Ejecutar la consulta asíncrona
     resultado = await db.execute(consulta)
