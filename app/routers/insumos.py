@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user, get_db, require_permission
 from app.models.orm.inventario import Insumo, RetiroInsumo, DevolucionInsumo
@@ -10,6 +10,7 @@ from app.models.orm.rbac import Usuario
 
 from app.schemas.insumo import (
     RetiroInsumoCreate,
+    InsumoCreate,
     InsumoResponse,
     DevolucionInsumoCreate,
     DevolucionInsumoResponse,
@@ -95,6 +96,35 @@ async def listar_kardex(
     return insumos
 
 # -------------------------------------------------------------------
+# POST: Ingresar un insumo nuevo a la CEYE (alta de mercancía)
+# -------------------------------------------------------------------
+@router.post("/", response_model=InsumoResponse, status_code=status.HTTP_201_CREATED)
+async def crear_insumo(
+    datos: InsumoCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario_actual: Usuario = Depends(require_permission("insumos:crear")),
+):
+    # 1. Verificar que el código de barras no exista ya
+    resultado = await db.execute(
+        select(Insumo).where(Insumo.codigo_barras == datos.codigo_barras)
+    )
+    if resultado.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El código de barras ya está registrado.",
+        )
+
+    # 2. Crear el insumo
+    nuevo_insumo = Insumo(**datos.model_dump())
+
+    # 3. Guardar y devolver
+    db.add(nuevo_insumo)
+    await db.commit()
+    await db.refresh(nuevo_insumo)
+
+    return nuevo_insumo
+
+# -------------------------------------------------------------------
 # POST: Registrar una devolución (Reintegrar material al inventario)
 # -------------------------------------------------------------------
 @router.post("/devoluciones", response_model=DevolucionInsumoResponse, status_code=status.HTTP_201_CREATED)
@@ -115,13 +145,21 @@ async def registrar_devolucion(
             detail="Error: El retiro original no existe en el sistema."
         )
 
-    # 2. Verificar que no se devuelva más material del que se retiró
-    if vale_devolucion.cantidad_devuelta > retiro_db.cantidad_retirada:
+   # 2. Sumar las devoluciones previas de este retiro
+    resultado_suma = await db.execute(
+        select(func.coalesce(func.sum(DevolucionInsumo.cantidad_devuelta), 0)).where(
+            DevolucionInsumo.retiro_id == vale_devolucion.retiro_id
+        )
+    )
+    ya_devuelto = resultado_suma.scalar() or 0
+
+    # 3. Verificar que el total (previo + nuevo) no supere lo retirado
+    if ya_devuelto + vale_devolucion.cantidad_devuelta > retiro_db.cantidad_retirada:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error: No puedes devolver más de lo retirado ({retiro_db.cantidad_retirada})."
+            detail=f"La devolución supera lo retirado. Ya devuelto: {ya_devuelto}, retirado: {retiro_db.cantidad_retirada}."
         )
-    # 3. Buscar el insumo asociado al retiro para reintegrar el stock
+    # 4. Buscar el insumo asociado al retiro para reintegrar el stock
     resultado_insumo = await db.execute(
         select(Insumo).where(Insumo.id == retiro_db.insumo_id)
     )
@@ -209,3 +247,25 @@ async def listar_devoluciones(
 
     # 4. Retornar la lista (FastAPI la serializa con DevolucionInsumoResponse)
     return devoluciones
+
+# -------------------------------------------------------------------
+# GET: Buscar un insumo por su código de barras
+# -------------------------------------------------------------------
+@router.get("/{codigo_barras}", response_model=InsumoResponse, status_code=status.HTTP_200_OK)
+async def buscar_por_codigo(
+    codigo_barras: str,
+    db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    resultado = await db.execute(
+        select(Insumo).where(Insumo.codigo_barras == codigo_barras)
+    )
+    insumo = resultado.scalar_one_or_none()
+
+    if not insumo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontró un insumo con ese código de barras.",
+        )
+
+    return insumo
