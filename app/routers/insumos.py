@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user, get_db, require_permission
 from app.models.orm.inventario import Insumo, RetiroInsumo, DevolucionInsumo, Lote
 from app.models.orm.rbac import Usuario
-
+from datetime import date
  
 
 from app.schemas.insumo import (
@@ -47,17 +47,24 @@ async def procesar_retiro(
             detail="Error: El lote indicado no existe."
         )
 
-    # 2. Verificar la cantidad en ese lote
+    # 2. Verificar que el lote no esté vencido
+    if lote_db.fecha_vencimiento is not None and lote_db.fecha_vencimiento.date() < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El lote está vencido y no se puede retirar.",
+        )
+
+    # 3. Verificar la cantidad en ese lote
     if lote_db.stock_actual < vale_farmacia.cantidad_retirada:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Stock insuficiente en el lote. Solo hay {lote_db.stock_actual} unidades."
         )
 
-    # 3. Descontar del lote
+    # 4. Descontar del lote
     lote_db.stock_actual -= vale_farmacia.cantidad_retirada
 
-    # 4. Crear el registro inmutable (insumo se deriva del lote)
+    # 5. Crear el registro inmutable (insumo se deriva del lote)
     nuevo_retiro = RetiroInsumo(
         insumo_id=lote_db.insumo_id,
         lote_id=lote_db.id,
@@ -67,12 +74,12 @@ async def procesar_retiro(
         observaciones=vale_farmacia.observaciones
     )
 
-    # 5. Guardar
+    # 6. Guardar
     db.add(nuevo_retiro)
     await db.commit()
     await db.refresh(nuevo_retiro)
 
-    # 6. Entregar el comprobante
+    # 7. Entregar el comprobante
     return nuevo_retiro
 
 # -------------------------------------------------------------------
@@ -154,10 +161,17 @@ async def crear_lote(
             detail="El insumo indicado no existe.",
         )
 
-    # 2. Crear el lote
+    # 2. Validar que la fecha de vencimiento no sea pasada
+    if datos.fecha_vencimiento is not None and datos.fecha_vencimiento.date() < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La fecha de vencimiento no puede estar en el pasado.",
+        )
+
+    # 3. Crear el lote
     nuevo_lote = Lote(**datos.model_dump())
 
-    # 3. Guardar y devolver
+    # 4. Guardar y devolver
     db.add(nuevo_lote)
     await db.commit()
     await db.refresh(nuevo_lote)

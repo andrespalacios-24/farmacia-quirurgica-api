@@ -1,5 +1,5 @@
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from enum import Enum
 
@@ -26,6 +26,21 @@ class LoteCreate(LoteBase):
 class LoteResumen(LoteBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field
+    @property
+    def vencido(self) -> bool:
+        if self.fecha_vencimiento is None:
+            return False
+        return self.fecha_vencimiento.date() < date.today()
+
+    @computed_field
+    @property
+    def por_vencer(self) -> bool:
+        if self.fecha_vencimiento is None:
+            return False
+        dias = (self.fecha_vencimiento.date() - date.today()).days
+        return 0 <= dias <= 30
 
 class InsumoResponse(InsumoBase):
     id: int
