@@ -4,9 +4,9 @@ from sqlalchemy import select
 # Importamos nuestro circulante (la dependencia)
 from app.api.deps import get_db
 # Importamos la anatomía (Modelos DB)
-from app.models.orm.clinica import Procedimiento, Paciente
+from app.models import Procedimiento, Paciente
 # Importamos el instrumental (Esquemas Pydantic)
-from app.schemas.procedimientos import ProcedimientoCreate, ProcedimientoResponse
+from app.schemas import ProcedimientoCreate, ProcedimientoResponse
 from sqlalchemy.orm import selectinload
 
 # Definimos el router (Nuestra nueva sala)

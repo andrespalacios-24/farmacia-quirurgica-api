@@ -11,8 +11,8 @@ from app.core.security import (
     decodificar_token,
     verify_password,
 )
-from app.models.orm.rbac import Usuario
-from app.schemas.auth import TokenResponse, RefreshRequest
+from app.models import Usuario
+from app.schemas import TokenResponse, RefreshRequest 
 
 router = APIRouter(
     prefix="/auth",

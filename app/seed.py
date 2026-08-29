@@ -5,9 +5,7 @@ from pwdlib import PasswordHash
 from app.database import AsyncSessionLocal # (Ajusta el nombre según como lo tengas en database.py)
 
 # Importamos los modelos ORM de tu módulo RBAC
-from app.models.orm.rbac import Permiso, Rol, Usuario
-from app.models.orm.inventario import Insumo, Lote
-from app.models.orm.clinica import Paciente
+from app.models import Permiso, Rol, Usuario, Insumo, Lote, Paciente
 
 # Inicializamos pwdlib usando su configuración recomendada (típicamente bcrypt)
 password_hash = PasswordHash.recommended()
