@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.security import decodificar_token
 from app.database import AsyncSessionLocal
-from app.models.orm.rbac import Usuario, Rol
+from app.models import Usuario, Rol
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

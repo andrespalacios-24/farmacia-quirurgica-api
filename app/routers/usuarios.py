@@ -5,8 +5,8 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_permission
 from app.core.security import hash_password
-from app.models.orm.rbac import Usuario, Rol
-from app.schemas.usuario import UsuarioCreate, UsuarioResponse
+from app.models import Usuario, Rol
+from app.schemas import UsuarioCreate, UsuarioResponse
 
 router = APIRouter(
     prefix="/usuarios",
