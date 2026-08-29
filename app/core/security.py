@@ -6,36 +6,36 @@ from pwdlib import PasswordHash
 
 from app.config import settings
 
-# Fábrica global de hashing (la misma que usa el seed)
+# Global hashing factory (the same one used by the seed)
 password_hash = PasswordHash.recommended()
 
 
-def hash_password(contrasena: str) -> str:
-    return password_hash.hash(contrasena)
+def hash_password(password: str) -> str:
+    return password_hash.hash(password)
 
 
-def verify_password(contrasena: str, hash_guardado: str) -> bool:
-    return password_hash.verify(contrasena, hash_guardado)
+def verify_password(password: str, saved_hash: str) -> bool:
+    return password_hash.verify(password, saved_hash)
 
 
-def _crear_token(sub: str, tipo: str, expira_en_minutos: int) -> str:
-    ahora = datetime.now(timezone.utc)
+def _create_token(sub: str, token_type: str, expires_in_minutes: int) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": sub,
-        "type": tipo,
-        "iat": ahora,
-        "exp": ahora + timedelta(minutes=expira_en_minutos),
+        "type": token_type,
+        "iat": now,
+        "exp": now + timedelta(minutes=expires_in_minutes),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def crear_access_token(username: str) -> str:
-    return _crear_token(username, "access", settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+def create_access_token(username: str) -> str:
+    return _create_token(username, "access", settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
 
-def crear_refresh_token(username: str) -> str:
-    return _crear_token(username, "refresh", settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+def create_refresh_token(username: str) -> str:
+    return _create_token(username, "refresh", settings.REFRESH_TOKEN_EXPIRE_MINUTES)
 
 
-def decodificar_token(token: str) -> dict:
+def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

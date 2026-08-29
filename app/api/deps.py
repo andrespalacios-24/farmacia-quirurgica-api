@@ -7,9 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.security import decodificar_token
+from app.core.security import decode_token
 from app.database import AsyncSessionLocal
-from app.models import Usuario, Rol
+from app.models import User, Role
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -17,74 +17,74 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-# Esquema OAuth2: de aquí sale el botón "Authorize" en Swagger
+# OAuth2 schema: this provides the "Authorize" button in Swagger
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
-) -> Usuario:
-    # 1. Decodificar el token (valida firma y expiración)
+) -> User:
+    # 1. Decode the token (validates signature and expiration)
     try:
-        payload = decodificar_token(token)
+        payload = decode_token(token)
     except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token inválido o expirado.",
+            detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 2. Verificar que sea un token de tipo "access"
+    # 2. Verify it is an "access" token
     if payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de tipo incorrecto.",
+            detail="Incorrect token type.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. Extraer el usuario (subject) del token
+    # 3. Extract the user (subject) from the token
     username = payload.get("sub")
     if username is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token sin sujeto.",
+            detail="Token without subject.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 4. Cargar el usuario con sus roles y permisos (carga ansiosa)
-    consulta = (
-        select(Usuario)
-        .where(Usuario.username == username)
-        .options(selectinload(Usuario.roles).selectinload(Rol.permisos))
+    # 4. Load the user with their roles and permissions (eager loading)
+    query = (
+        select(User)
+        .where(User.username == username)
+        .options(selectinload(User.roles).selectinload(Role.permissions))
     )
-    resultado = await db.execute(consulta)
-    usuario = resultado.scalar_one_or_none()
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
 
-    if usuario is None or not usuario.activo:
+    if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario no encontrado o inactivo.",
+            detail="User not found or inactive.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return usuario
+    return user
 
-def require_permission(codigo_permiso: str):
-    async def verificar_permiso(
-        usuario: Usuario = Depends(get_current_user),
-    ) -> Usuario:
-        permisos_usuario = {
-            permiso.codigo
-            for rol in usuario.roles
-            for permiso in rol.permisos
+def require_permission(permission_code: str):
+    async def verify_permission(
+        user: User = Depends(get_current_user),
+    ) -> User:
+        user_permissions = {
+            permission.code
+            for role in user.roles
+            for permission in role.permissions
         }
 
-        if codigo_permiso not in permisos_usuario:
+        if permission_code not in user_permissions:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permiso denegado: se requiere '{codigo_permiso}'.",
+                detail=f"Permission denied: requires '{permission_code}'.",
             )
-        return usuario
+        return user
 
-    return verificar_permiso
+    return verify_permission

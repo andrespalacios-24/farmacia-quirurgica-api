@@ -1,0 +1,271 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
+from app.api.deps import get_current_user, get_db, require_permission
+from app.models import Supply, SupplyWithdrawal, SupplyReturn, Batch, User
+from datetime import date
+ 
+
+from app.schemas import (
+    SupplyWithdrawalCreate,
+    SupplyCreate,
+    SupplyResponse,
+    SupplyReturnCreate,
+    SupplyReturnResponse,
+    SupplyStatus,
+    SupplyWithdrawalResponse,
+    BatchCreate,
+    BatchSummary,
+)
+
+router = APIRouter(
+    prefix="/supplies",
+    tags=["Inventory and Pharmacy"]
+)
+
+@router.post("/withdrawals", status_code=status.HTTP_201_CREATED)
+async def process_withdrawal(
+    withdrawal_voucher: SupplyWithdrawalCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("supplies:withdraw")),
+):
+    result_batch = await db.execute(
+        select(Batch).where(Batch.id == withdrawal_voucher.batch_id)
+    )
+    batch_db = result_batch.scalar_one_or_none()
+
+    if not batch_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Error: The indicated batch does not exist."
+        )
+
+    if batch_db.expiration_date is not None and batch_db.expiration_date.date() < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The batch is expired and cannot be withdrawn.",
+        )
+
+    if batch_db.current_stock < withdrawal_voucher.withdrawn_quantity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Insufficient stock in the batch. Only {batch_db.current_stock} units available."
+        )
+
+    batch_db.current_stock -= withdrawal_voucher.withdrawn_quantity
+
+    new_withdrawal = SupplyWithdrawal(
+        supply_id=batch_db.supply_id,
+        batch_id=batch_db.id,
+        procedure_id=withdrawal_voucher.procedure_id,
+        user_id=user.id,
+        withdrawn_quantity=withdrawal_voucher.withdrawn_quantity,
+        observations=withdrawal_voucher.observations
+    )
+
+    db.add(new_withdrawal)
+    await db.commit()
+    await db.refresh(new_withdrawal)
+
+    return new_withdrawal
+
+
+@router.get("/", response_model=list[SupplyResponse], status_code=status.HTTP_200_OK)
+async def list_inventory(
+    low_stock: bool = False,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    query = select(Supply).options(selectinload(Supply.batches))
+    result = await db.execute(query)
+    supplies = result.scalars().all()
+
+    if low_stock:
+        supplies = [
+            s for s in supplies
+            if sum(b.current_stock for b in s.batches) <= s.minimum_stock
+        ]
+
+    return supplies[skip:skip + limit]
+
+
+@router.post("/", response_model=SupplyResponse, status_code=status.HTTP_201_CREATED)
+async def create_supply(
+    data: SupplyCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("supplies:create")),
+):
+    result = await db.execute(
+        select(Supply).where(Supply.barcode == data.barcode)
+    )
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The barcode is already registered.",
+        )
+
+    new_supply = Supply(**data.model_dump())
+
+    db.add(new_supply)
+    await db.commit()
+
+    complete_query = (
+        select(Supply)
+        .where(Supply.id == new_supply.id)
+        .options(selectinload(Supply.batches))
+    )
+    final_result = await db.execute(complete_query)
+    complete_supply = final_result.scalar_one()
+
+    return complete_supply
+
+
+@router.post("/batches", response_model=BatchSummary, status_code=status.HTTP_201_CREATED)
+async def create_batch(
+    data: BatchCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("supplies:create")),
+):
+    result = await db.execute(
+        select(Supply).where(Supply.id == data.supply_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The indicated supply does not exist.",
+        )
+
+    if data.expiration_date is not None and data.expiration_date.date() < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The expiration date cannot be in the past.",
+        )
+
+    new_batch = Batch(**data.model_dump())
+
+    db.add(new_batch)
+    await db.commit()
+    await db.refresh(new_batch)
+
+    return new_batch
+
+
+@router.post("/returns", response_model=SupplyReturnResponse, status_code=status.HTTP_201_CREATED)
+async def register_return(
+    return_voucher: SupplyReturnCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission("supplies:return"))
+):
+    result_withdrawal = await db.execute(
+        select(SupplyWithdrawal)
+        .where(SupplyWithdrawal.id == return_voucher.withdrawal_id)
+        .options(selectinload(SupplyWithdrawal.batch))
+    )
+    withdrawal_db = result_withdrawal.scalar_one_or_none()
+
+    if not withdrawal_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Error: The original withdrawal does not exist in the system."
+        )
+
+    sum_result = await db.execute(
+        select(func.coalesce(func.sum(SupplyReturn.returned_quantity), 0)).where(
+            SupplyReturn.withdrawal_id == return_voucher.withdrawal_id
+        )
+    )
+    already_returned = sum_result.scalar() or 0
+
+    if already_returned + return_voucher.returned_quantity > withdrawal_db.withdrawn_quantity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"The return exceeds the withdrawn amount. Already returned: {already_returned}, withdrawn: {withdrawal_db.withdrawn_quantity}."
+        )
+
+    if return_voucher.supply_status == SupplyStatus.STERILE_INTACT:
+        withdrawal_db.batch.current_stock += return_voucher.returned_quantity
+
+    new_return = SupplyReturn(
+        withdrawal_id=return_voucher.withdrawal_id,
+        receiving_user_id=user.id,
+        returned_quantity=return_voucher.returned_quantity,
+        supply_status=return_voucher.supply_status,
+        observations=return_voucher.observations
+    )
+
+    db.add(new_return)
+    await db.commit()
+
+    complete_query = select(SupplyReturn).where(
+        SupplyReturn.id == new_return.id
+    ).options(
+        selectinload(SupplyReturn.receiving_user),
+        selectinload(SupplyReturn.withdrawal).selectinload(SupplyWithdrawal.supply),
+    )
+    final_result = await db.execute(complete_query)
+    complete_return = final_result.scalar_one()
+
+    return complete_return
+
+
+@router.get("/withdrawals", response_model=list[SupplyWithdrawalResponse], status_code=status.HTTP_200_OK)
+async def list_withdrawals(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    query = select(SupplyWithdrawal).options(
+        selectinload(SupplyWithdrawal.supply),
+        selectinload(SupplyWithdrawal.batch),
+        selectinload(SupplyWithdrawal.user),
+        selectinload(SupplyWithdrawal.procedure),
+    ).offset(skip).limit(limit)
+
+    result = await db.execute(query)
+    withdrawals = result.scalars().all()
+
+    return withdrawals
+
+
+@router.get("/returns", response_model=list[SupplyReturnResponse], status_code=status.HTTP_200_OK)
+async def list_returns(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    query = select(SupplyReturn).options(
+        selectinload(SupplyReturn.receiving_user),
+        selectinload(SupplyReturn.withdrawal).selectinload(SupplyWithdrawal.supply),
+    ).offset(skip).limit(limit)
+
+    result = await db.execute(query)
+    returns = result.scalars().all()
+
+    return returns
+
+
+@router.get("/{barcode}", response_model=SupplyResponse, status_code=status.HTTP_200_OK)
+async def search_by_barcode(
+    barcode: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Supply)
+        .where(Supply.barcode == barcode)
+        .options(selectinload(Supply.batches))
+    )
+    supply = result.scalar_one_or_none()
+
+    if not supply:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No supply found with that barcode.",
+        )
+
+    return supply

@@ -1,22 +1,26 @@
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime, Table, Column, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.orm.inventario import SupplyWithdrawal, SupplyReturn
+
 # ----------------------------------------------------------------------
-# TABLAS DE ASOCIACIÓN (Muchos a Muchos)
+# ASSOCIATION TABLES (Many-to-Many)
 # ----------------------------------------------------------------------
 
-# Tabla intermedia: Usuario <-> Rol
-usuario_rol = Table(
+# Intermediate table: User <-> Role
+user_role = Table(
     "usuario_rol",
     Base.metadata,
     Column("usuario_id", ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True),
     Column("rol_id", ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
 )
 
-# Tabla intermedia: Rol <-> Permiso
-rol_permiso = Table(
+# Intermediate table: Role <-> Permission
+role_permission = Table(
     "rol_permiso",
     Base.metadata,
     Column("rol_id", ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
@@ -25,60 +29,60 @@ rol_permiso = Table(
 
 
 # ----------------------------------------------------------------------
-# MODELOS ORM
+# ORM MODELS
 # ----------------------------------------------------------------------
 
-class Permiso(Base):
+class Permission(Base):
     """
-    Define un permiso granular dentro del sistema.
-    Ejemplo: codigo="usuarios:crear", descripcion="Permite registrar nuevos usuarios"
+    Defines a granular permission within the system.
+    Example: code="users:create", description="Allows registering new users"
     """
     __tablename__ = "permisos"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    codigo: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
-    descripcion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    code: Mapped[str] = mapped_column("codigo", String(100), unique=True, index=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column("descripcion", String(255), nullable=True)
 
-    # Relación M:N con Roles
-    roles: Mapped[List["Rol"]] = relationship(
-        secondary=rol_permiso, 
-        back_populates="permisos"
+    # M:N Relationship with Roles
+    roles: Mapped[List["Role"]] = relationship(
+        secondary=role_permission, 
+        back_populates="permissions"
     )
 
     def __repr__(self) -> str:
-        return f"<Permiso(codigo='{self.codigo}')>"
+        return f"<Permission(code='{self.code}')>"
 
 
-class Rol(Base):
+class Role(Base):
     """
-    Representa los roles de usuario en el sistema.
-    Ejemplo: nombre="ADMIN", "INSTRUMENTADOR", "FARMACEUTICO"
+    Represents user roles in the system.
+    Example: name="ADMIN", "INSTRUMENTALIST", "PHARMACIST"
     """
     __tablename__ = "roles"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    nombre: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    descripcion: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    name: Mapped[str] = mapped_column("nombre", String(50), unique=True, index=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column("descripcion", String(255), nullable=True)
 
-    # Relación M:N con Permisos
-    permisos: Mapped[List[Permiso]] = relationship(
-        secondary=rol_permiso, 
+    # M:N Relationship with Permissions
+    permissions: Mapped[List[Permission]] = relationship(
+        secondary=role_permission, 
         back_populates="roles"
     )
 
-    # Relación M:N con Usuarios
-    usuarios: Mapped[List["Usuario"]] = relationship(
-        secondary=usuario_rol, 
+    # M:N Relationship with Users
+    users: Mapped[List["User"]] = relationship(
+        secondary=user_role, 
         back_populates="roles"
     )
 
     def __repr__(self) -> str:
-        return f"<Rol(nombre='{self.nombre}')>"
+        return f"<Role(name='{self.name}')>"
 
 
-class Usuario(Base):
+class User(Base):
     """
-    Representa a los usuarios del sistema de farmacia quirúrgica.
+    Represents the users of the surgical pharmacy system.
     """
     __tablename__ = "usuarios"
 
@@ -87,30 +91,30 @@ class Usuario(Base):
     email: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     
-    nombre_completo: Mapped[str] = mapped_column(String(150), nullable=False)
-    activo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    full_name: Mapped[str] = mapped_column("nombre_completo", String(150), nullable=False)
+    is_active: Mapped[bool] = mapped_column("activo", Boolean, default=True, server_default="true", nullable=False)
     
-    fecha_creacion: Mapped[datetime] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
+        "fecha_creacion",
         DateTime(timezone=True), 
         server_default=func.now(), 
         nullable=False
     )
 
-    # Relación M:N con Roles
-    roles: Mapped[List[Rol]] = relationship(
-        secondary=usuario_rol, 
-        back_populates="usuarios"
+    # M:N Relationship with Roles
+    roles: Mapped[List[Role]] = relationship(
+        secondary=user_role, 
+        back_populates="users"
     )
 
-    # Relaciones 1:N con Retiros y Devoluciones (Trazabilidad)
-    retiros_realizados: Mapped[List["RetiroInsumo"]] = relationship(  # type: ignore
-        "RetiroInsumo", 
-        back_populates="usuario"
+    # 1:N Relationships with Withdrawals and Returns (Traceability)
+    withdrawals_made: Mapped[List["SupplyWithdrawal"]] = relationship(  # type: ignore
+        "SupplyWithdrawal", 
+        back_populates="user"
     )
-    devoluciones_recibidas: Mapped[List["DevolucionInsumo"]] = relationship(  # type: ignore
-        "DevolucionInsumo", 
-        back_populates="usuario_recibe"
+    returns_received: Mapped[List["SupplyReturn"]] = relationship(  # type: ignore
+        "SupplyReturn", 
+        back_populates="receiving_user"
     )
     def __repr__(self) -> str:
-        return f"<Usuario(username='{self.username}', email='{self.email}')>"
-
+        return f"<User(username='{self.username}', email='{self.email}')>"

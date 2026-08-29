@@ -1,113 +1,115 @@
- # app/models/orm/inventario.py
+# app/models/orm/inventario.py
 from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime
 from sqlalchemy import String, Integer, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
-from app.models.orm.rbac import Usuario
+from app.models.orm.rbac import User
 
 if TYPE_CHECKING:
-    from app.models.orm.clinica import Procedimiento
+    from app.models.orm.clinica import Procedure
 
-class Insumo(Base):
+class Supply(Base):
     """
-    Representa el producto o insumo (su identidad), sin stock ni lote.
+    Represents the product or supply (its identity), without stock or batch.
     """
     __tablename__ = "insumos"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    codigo_barras: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
-    nombre: Mapped[str] = mapped_column(String(150), index=True, nullable=False)
-    descripcion: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    barcode: Mapped[str] = mapped_column("codigo_barras", String(100), unique=True, index=True, nullable=False)
+    name: Mapped[str] = mapped_column("nombre", String(150), index=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column("descripcion", Text, nullable=True)
 
-    stock_minimo: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
-    unidad_medida: Mapped[str] = mapped_column(String(30), default="Unidad", nullable=False)  # Ej: "Caja", "Ampolla", "Unidad"
+    minimum_stock: Mapped[int] = mapped_column("stock_minimo", Integer, default=5, nullable=False)
+    unit_of_measure: Mapped[str] = mapped_column("unidad_medida", String(30), default="Unidad", nullable=False)  # Ex: "Box", "Ampoule", "Unit"
 
-    # Relaciones
-    retiros: Mapped[List["RetiroInsumo"]] = relationship("RetiroInsumo", back_populates="insumo")
-    lotes: Mapped[List["Lote"]] = relationship("Lote", back_populates="insumo")
+    # Relationships
+    withdrawals: Mapped[List["SupplyWithdrawal"]] = relationship("SupplyWithdrawal", back_populates="supply")
+    batches: Mapped[List["Batch"]] = relationship("Batch", back_populates="supply")
 
     def __repr__(self) -> str:
-        return f"<Insumo(nombre='{self.nombre}', codigo='{self.codigo_barras}')>"
+        return f"<Supply(name='{self.name}', barcode='{self.barcode}')>"
 
-class Lote(Base):
+class Batch(Base):
     """
-    Representa una partida/remesa de un insumo, con su stock y vencimiento.
+    Represents a batch/consignment of a supply, with its stock and expiration.
     """
     __tablename__ = "lotes"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
-    insumo_id: Mapped[int] = mapped_column(ForeignKey("insumos.id", ondelete="RESTRICT"), nullable=False)
-    numero_lote: Mapped[str] = mapped_column(String(50), nullable=False)
-    fecha_vencimiento: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    stock_actual: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    supply_id: Mapped[int] = mapped_column("insumo_id", ForeignKey("insumos.id", ondelete="RESTRICT"), nullable=False)
+    batch_number: Mapped[str] = mapped_column("numero_lote", String(50), nullable=False)
+    expiration_date: Mapped[Optional[datetime]] = mapped_column("fecha_vencimiento", DateTime(timezone=True), nullable=True)
+    current_stock: Mapped[int] = mapped_column("stock_actual", Integer, default=0, nullable=False)
 
-    # Relaciones
-    insumo: Mapped["Insumo"] = relationship("Insumo", back_populates="lotes")
-    retiros: Mapped[List["RetiroInsumo"]] = relationship("RetiroInsumo", back_populates="lote")
+    # Relationships
+    supply: Mapped["Supply"] = relationship("Supply", back_populates="batches")
+    withdrawals: Mapped[List["SupplyWithdrawal"]] = relationship("SupplyWithdrawal", back_populates="batch")
 
     def __repr__(self) -> str:
-        return f"<Lote(id={self.id}, lote='{self.numero_lote}', stock={self.stock_actual})>"
+        return f"<Batch(id={self.id}, batch_number='{self.batch_number}', stock={self.current_stock})>"
 
-class RetiroInsumo(Base):
+class SupplyWithdrawal(Base):
     """
-    Registra la salida física de un insumo hacia un quirófano determinado.
+    Records the physical exit of a supply to a specific operating room.
     """
     __tablename__ = "retiros_insumos"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     
-    insumo_id: Mapped[int] = mapped_column(ForeignKey("insumos.id", ondelete="RESTRICT"), nullable=False)
-    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False)
-    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
+    supply_id: Mapped[int] = mapped_column("insumo_id", ForeignKey("insumos.id", ondelete="RESTRICT"), nullable=False)
+    batch_id: Mapped[int] = mapped_column("lote_id", ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False)
+    user_id: Mapped[int] = mapped_column("usuario_id", ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
     
-    procedimiento_id: Mapped[int] = mapped_column(ForeignKey("procedimientos.id", ondelete="RESTRICT"), nullable=False)
-    cantidad_retirada: Mapped[int] = mapped_column(Integer, nullable=False)
+    procedure_id: Mapped[int] = mapped_column("procedimiento_id", ForeignKey("procedimientos.id", ondelete="RESTRICT"), nullable=False)
+    withdrawn_quantity: Mapped[int] = mapped_column("cantidad_retirada", Integer, nullable=False)
     
-    fecha_retiro: Mapped[datetime] = mapped_column(
+    withdrawal_date: Mapped[datetime] = mapped_column(
+        "fecha_retiro",
         DateTime(timezone=True), 
         server_default=func.now(), 
         nullable=False
     )
-    observaciones: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    observations: Mapped[Optional[str]] = mapped_column("observaciones", Text, nullable=True)
 
-    # Relaciones ORM
-    insumo: Mapped["Insumo"] = relationship("Insumo", back_populates="retiros")
-    lote: Mapped["Lote"] = relationship("Lote", back_populates="retiros")
-    usuario: Mapped["Usuario"] = relationship("Usuario", back_populates="retiros_realizados")
-    devoluciones: Mapped[List["DevolucionInsumo"]] = relationship("DevolucionInsumo", back_populates="retiro")
-    procedimiento: Mapped["Procedimiento"] = relationship("Procedimiento", back_populates="retiros")
+    # ORM Relationships
+    supply: Mapped["Supply"] = relationship("Supply", back_populates="withdrawals")
+    batch: Mapped["Batch"] = relationship("Batch", back_populates="withdrawals")
+    user: Mapped["User"] = relationship("User", back_populates="withdrawals_made")
+    returns: Mapped[List["SupplyReturn"]] = relationship("SupplyReturn", back_populates="withdrawal")
+    procedure: Mapped["Procedure"] = relationship("Procedure", back_populates="withdrawals")
 
     def __repr__(self) -> str:
-        return f"<RetiroInsumo(id={self.id}, insumo_id={self.insumo_id}, cantidad={self.cantidad_retirada})>"
+        return f"<SupplyWithdrawal(id={self.id}, supply_id={self.supply_id}, quantity={self.withdrawn_quantity})>"
 
 
-class DevolucionInsumo(Base):
+class SupplyReturn(Base):
     """
-    Registra el retorno parcial o total de insumos no utilizados o dañados.
-    Vinculado obligatoriamente a un retiro previo.
+    Records the partial or total return of unused or damaged supplies.
+    Mandatorily linked to a previous withdrawal.
     """
     __tablename__ = "devoluciones_insumos"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     
-    retiro_id: Mapped[int] = mapped_column(ForeignKey("retiros_insumos.id", ondelete="RESTRICT"), nullable=False)
-    usuario_recibe_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
+    withdrawal_id: Mapped[int] = mapped_column("retiro_id", ForeignKey("retiros_insumos.id", ondelete="RESTRICT"), nullable=False)
+    receiving_user_id: Mapped[int] = mapped_column("usuario_recibe_id", ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False)
     
-    cantidad_devuelta: Mapped[int] = mapped_column(Integer, nullable=False)
-    estado_insumo: Mapped[str] = mapped_column(String(50), nullable=False)  # Ej: "Estéril/Intacto", "Dañado", "Abierto"
+    returned_quantity: Mapped[int] = mapped_column("cantidad_devuelta", Integer, nullable=False)
+    supply_status: Mapped[str] = mapped_column("estado_insumo", String(50), nullable=False)  # Ex: "Sterile/Intact", "Damaged", "Opened"
     
-    fecha_devolucion: Mapped[datetime] = mapped_column(
+    return_date: Mapped[datetime] = mapped_column(
+        "fecha_devolucion",
         DateTime(timezone=True), 
         server_default=func.now(), 
         nullable=False
     )
-    observaciones: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    observations: Mapped[Optional[str]] = mapped_column("observaciones", Text, nullable=True)
 
-    # Relaciones ORM
-    retiro: Mapped["RetiroInsumo"] = relationship("RetiroInsumo", back_populates="devoluciones")
-    usuario_recibe: Mapped["Usuario"] = relationship("Usuario", back_populates="devoluciones_recibidas")
+    # ORM Relationships
+    withdrawal: Mapped["SupplyWithdrawal"] = relationship("SupplyWithdrawal", back_populates="returns")
+    receiving_user: Mapped["User"] = relationship("User", back_populates="returns_received")
 
     def __repr__(self) -> str:
-        return f"<DevolucionInsumo(id={self.id}, retiro_id={self.retiro_id}, estado='{self.estado_insumo}')>"
+        return f"<SupplyReturn(id={self.id}, withdrawal_id={self.withdrawal_id}, status='{self.supply_status}')>"

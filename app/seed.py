@@ -1,118 +1,115 @@
 import asyncio
 from pwdlib import PasswordHash
 
-# Importamos el creador de sesiones asíncronas de tu configuración de BD
-from app.database import AsyncSessionLocal # (Ajusta el nombre según como lo tengas en database.py)
+# Import the async session creator from the DB configuration
+from app.database import AsyncSessionLocal 
 
-# Importamos los modelos ORM de tu módulo RBAC
-from app.models import Permiso, Rol, Usuario, Insumo, Lote, Paciente
+# Import the ORM models
+from app.models import Permission, Role, User, Supply, Batch, Patient
 
-# Inicializamos pwdlib usando su configuración recomendada (típicamente bcrypt)
+# Initialize pwdlib using its recommended configuration (typically bcrypt)
 password_hash = PasswordHash.recommended()
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # ==========================================
-# 1. FUENTE DE VERDAD (DATA STRUCTURES)
+# 1. SOURCE OF TRUTH (DATA STRUCTURES)
 # ==========================================
 
-# Lista plana de todos los permisos atómicos del sistema
-PERMISOS_BASE = [
-    "usuarios:crear",
-    "usuarios:leer",
-    "insumos:crear",
-    "insumos:retirar",
-    "insumos:devolver",
-    "reportes:leer"
+# Flat list of all atomic permissions in the system
+BASE_PERMISSIONS = [
+    "users:create",
+    "users:read",
+    "supplies:create",
+    "supplies:withdraw",
+    "supplies:return",
+    "reports:read"
 ]
 
-# Diccionario que mapea cada ROL con los permisos exactos que le corresponden
-ROLES_BASE = {
-    "ADMIN": PERMISOS_BASE,  # El Admin hereda todos los permisos listados arriba
-    "INSTRUMENTADOR": [
-        "insumos:retirar", 
-        "insumos:devolver"
+# Dictionary mapping each ROLE to the exact permissions they correspond to
+BASE_ROLES = {
+    "ADMIN": BASE_PERMISSIONS,  # Admin inherits all permissions listed above
+    "INSTRUMENTALIST": [
+        "supplies:withdraw", 
+        "supplies:return"
     ],
-    "FARMACEUTICO": [
-        "insumos:crear", 
-        "insumos:retirar", 
-        "insumos:devolver", 
-        "reportes:leer"
+    "PHARMACIST": [
+        "supplies:create", 
+        "supplies:withdraw", 
+        "supplies:return", 
+        "reports:read"
     ],
-    "CIRUJANO": [
-        "reportes:leer"
+    "SURGEON": [
+        "reports:read"
     ],
-    "ANESTESIOLOGO": [
-        "insumos:retirar", 
-        "insumos:devolver",
-        "reportes:leer"
+    "ANESTHESIOLOGIST": [
+        "supplies:withdraw", 
+        "supplies:return",
+        "reports:read"
     ],
-    "CIRCULANTE": [
-    "insumos:retirar",
-    "insumos:devolver"
+    "CIRCULATING": [
+    "supplies:withdraw",
+    "supplies:return"
     ]   
 }
 
-# Datos del superusuario fundador
+# Data of the founding superuser
 ADMIN_USER = {
-    "username": "admin_principal", # Añadido para coincidir con tu modelo
-    "email": "admin@farmacia.quirurgica",
-    "nombre_completo": "Administrador Principal",
-    "password_plana": "Cirugia2026*"
+    "username": "main_admin", 
+    "email": "admin@surgical.pharmacy",
+    "full_name": "Main Administrator",
+    "plain_password": "Surgery2026*"
 }
 
-PACIENTES_BASE = [
+BASE_PATIENTS = [
     {
-        "cedula": "100200300", 
-        "nombre_completo": "Paciente Trauma Uno"
+        "national_id": "100200300", 
+        "full_name": "Patient Trauma One"
     },
     {
-        "cedula": "400500600", 
-        "nombre_completo": "Paciente Apendicectomía Dos"
+        "national_id": "400500600", 
+        "full_name": "Patient Appendectomy Two"
     }
 ]
 
-INSUMOS_BASE = [
+BASE_SUPPLIES = [
     {
-        "codigo_barras": "SUT-VIC-01",
-        "nombre": "Sutura Vicryl 1 CT-1",
-        "stock_minimo": 10
+        "barcode": "SUT-VIC-01",
+        "name": "Suture Vicryl 1 CT-1",
+        "minimum_stock": 10
     },
 ]
 
-LOTES_BASE = [
+BASE_BATCHES = [
     {
-        "codigo_barras": "SUT-VIC-01",
-        "numero_lote": "L-2026-08A",
-        "fecha_vencimiento": None,
-        "stock_actual": 50
+        "barcode": "SUT-VIC-01",
+        "batch_number": "L-2026-08A",
+        "expiration_date": None,
+        "current_stock": 50
     },
 ]
 
 
 # ==========================================
-# 2. FUNCIONES DE INSERCIÓN (IDEMPOTENTES)
+# 2. INSERTION FUNCTIONS (IDEMPOTENT)
 # ==========================================
 
-async def seed_permisos(session: AsyncSession):
-    print("--- Sembrando Permisos Base ---")
+async def seed_permissions(session: AsyncSession):
+    print("--- Seeding Base Permissions ---")
     
-    for codigo_permiso in PERMISOS_BASE:
-        # 1. Construimos la consulta usando 'Permiso.codigo'
-        stmt = select(Permiso).where(Permiso.codigo == codigo_permiso)
-        resultado = await session.execute(stmt)
-        permiso_existente = resultado.scalar_one_or_none()
+    for permission_code in BASE_PERMISSIONS:
+        stmt = select(Permission).where(Permission.code == permission_code)
+        result = await session.execute(stmt)
+        existing_permission = result.scalar_one_or_none()
         
-        # 2. Si no existe en la BD, lo instanciamos asignando el valor a 'codigo'
-        if not permiso_existente:
-            nuevo_permiso = Permiso(codigo=codigo_permiso)
-            session.add(nuevo_permiso)
-            print(f"[+] Permiso creado: {codigo_permiso}")
+        if not existing_permission:
+            new_permission = Permission(code=permission_code)
+            session.add(new_permission)
+            print(f"[+] Permission created: {permission_code}")
         else:
-            print(f"[=] Permiso ya existe: {codigo_permiso}")
+            print(f"[=] Permission already exists: {permission_code}")
             
-    # 3. Confirmamos la transacción
     await session.commit()
 
 #--------------------------------------------------------------------
@@ -120,174 +117,146 @@ async def seed_permisos(session: AsyncSession):
 #--------------------------------------------------------------------
 
 async def seed_roles(session: AsyncSession):
-    print("--- Sembrando Roles y Relaciones ---")
+    print("--- Seeding Roles and Relationships ---")
     
-    # Iteramos sobre el diccionario (clave: nombre_rol, valor: codigos_permisos)
-    for nombre_rol, codigos_permisos in ROLES_BASE.items():
+    for role_name, permission_codes in BASE_ROLES.items():
         
-        # 1. Verificamos si el rol ya existe
-        stmt_rol = select(Rol).where(Rol.nombre == nombre_rol)
-        resultado_rol = await session.execute(stmt_rol)
-        rol_existente = resultado_rol.scalar_one_or_none()
+        stmt_role = select(Role).where(Role.name == role_name)
+        result_role = await session.execute(stmt_role)
+        existing_role = result_role.scalar_one_or_none()
         
-        if not rol_existente:
-            # 2. Instanciamos el rol
-            nuevo_rol = Rol(nombre=nombre_rol)
+        if not existing_role:
+            new_role = Role(name=role_name)
             
-            # 3. Buscamos TODOS los permisos que le corresponden de una sola vez
-            stmt_permisos = select(Permiso).where(Permiso.codigo.in_(codigos_permisos))
-            resultado_permisos = await session.execute(stmt_permisos)
-            permisos_db = resultado_permisos.scalars().all()
+            stmt_permissions = select(Permission).where(Permission.code.in_(permission_codes))
+            result_permissions = await session.execute(stmt_permissions)
+            db_permissions = result_permissions.scalars().all()
             
-            # 4. Asignamos los objetos de la BD a la relación M:N del rol
-            nuevo_rol.permisos = list(permisos_db)
+            new_role.permissions = list(db_permissions)
             
-            # 5. Agregamos a la sesión
-            session.add(nuevo_rol)
-            print(f"[+] Rol creado y vinculado: {nombre_rol}")
+            session.add(new_role)
+            print(f"[+] Role created and linked: {role_name}")
         else:
-            print(f"[=] Rol ya existe: {nombre_rol}")
+            print(f"[=] Role already exists: {role_name}")
             
-    # 6. Guardamos los cambios
     await session.commit()
 
 async def seed_admin(session: AsyncSession):
-    print("--- Sembrando Usuario Administrador ---")
+    print("--- Seeding Administrator User ---")
     
-    # 1. Buscamos si el admin ya existe por su email
-    stmt = select(Usuario).where(Usuario.email == ADMIN_USER["email"])
-    resultado = await session.execute(stmt)
-    admin_existente = resultado.scalar_one_or_none()
+    stmt = select(User).where(User.email == ADMIN_USER["email"])
+    result = await session.execute(stmt)
+    existing_admin = result.scalar_one_or_none()
     
-    if not admin_existente:
-        # 2. Hasheamos la contraseña de forma segura
-        hashed_password = password_hash.hash(ADMIN_USER["password_plana"])
+    if not existing_admin:
+        hashed_password = password_hash.hash(ADMIN_USER["plain_password"])
         
-       # 3. Creamos el usuario con los atributos correctos del modelo
-        nuevo_admin = Usuario(
+        new_admin = User(
             username=ADMIN_USER["username"],
             email=ADMIN_USER["email"],
-            nombre_completo=ADMIN_USER["nombre_completo"],
-            hashed_password=hashed_password,  # <-- CORREGIDO AQUÍ
-            activo=True
+            full_name=ADMIN_USER["full_name"],
+            hashed_password=hashed_password, 
+            is_active=True
         )
         
-        # 4. Buscamos el rol ADMIN en la BD para asignárselo
-        stmt_rol = select(Rol).where(Rol.nombre == "ADMIN")
-        rol_admin = (await session.execute(stmt_rol)).scalar_one()
+        stmt_role = select(Role).where(Role.name == "ADMIN")
+        admin_role = (await session.execute(stmt_role)).scalar_one()
         
-        # 5. Vinculamos el rol y guardamos
-        nuevo_admin.roles = [rol_admin]
+        new_admin.roles = [admin_role]
         
-        session.add(nuevo_admin)
-        print(f"[+] Usuario Admin creado: {ADMIN_USER['email']}")
+        session.add(new_admin)
+        print(f"[+] Admin User created: {ADMIN_USER['email']}")
     else:
-        print(f"[=] Usuario Admin ya existe: {ADMIN_USER['email']}")
+        print(f"[=] Admin User already exists: {ADMIN_USER['email']}")
         
     await session.commit()
 
-async def seed_insumos(session: AsyncSession):
-    print("--- Ingresando Insumos a la CEYE ---")
+async def seed_supplies(session: AsyncSession):
+    print("--- Entering Supplies to Pharmacy ---")
     
-    # 1. Iteramos sobre nuestras cajas de prueba
-    for datos_insumo in INSUMOS_BASE:
+    for supply_data in BASE_SUPPLIES:
         
-        # 2. Consultamos el estante de acero por el código de barras
-        stmt = select(Insumo).where(Insumo.codigo_barras == datos_insumo["codigo_barras"])
-        resultado = await session.execute(stmt)
-        insumo_existente = resultado.scalar_one_or_none()
+        stmt = select(Supply).where(Supply.barcode == supply_data["barcode"])
+        result = await session.execute(stmt)
+        existing_supply = result.scalar_one_or_none()
         
-        # 3. Si la caja no está en el estante, la ingresamos
-        if not insumo_existente:
-            # 4. Desempaquetamos el diccionario directo en el modelo ORM
-            nuevo_insumo = Insumo(**datos_insumo)
+        if not existing_supply:
+            new_supply = Supply(**supply_data)
             
-            # 5. Colocamos la caja en el estante
-            session.add(nuevo_insumo)
-            print(f"[+] Insumo ingresado: {datos_insumo['nombre']}")
+            session.add(new_supply)
+            print(f"[+] Supply entered: {supply_data['name']}")
         else:
-            print(f"[=] Insumo ya en estante: {datos_insumo['nombre']}")
+            print(f"[=] Supply already on shelf: {supply_data['name']}")
             
-    # 6. Firmamos la recepción oficial en el sistema
     await session.commit()
 
-async def seed_lotes(session: AsyncSession):
-    print("--- Ingresando Lotes a la CEYE ---")
+async def seed_batches(session: AsyncSession):
+    print("--- Entering Batches to Pharmacy ---")
 
-    for datos_lote in LOTES_BASE:
-        # 1. Buscar el insumo por su código de barras
-        stmt_insumo = select(Insumo).where(Insumo.codigo_barras == datos_lote["codigo_barras"])
-        resultado_insumo = await session.execute(stmt_insumo)
-        insumo_db = resultado_insumo.scalar_one_or_none()
+    for batch_data in BASE_BATCHES:
+        stmt_supply = select(Supply).where(Supply.barcode == batch_data["barcode"])
+        result_supply = await session.execute(stmt_supply)
+        db_supply = result_supply.scalar_one_or_none()
 
-        if not insumo_db:
-            print(f"[!] Insumo no encontrado para el lote {datos_lote['numero_lote']}")
+        if not db_supply:
+            print(f"[!] Supply not found for batch {batch_data['batch_number']}")
             continue
 
-        # 2. Verificar si el lote ya existe
-        stmt_lote = select(Lote).where(
-            (Lote.insumo_id == insumo_db.id) & (Lote.numero_lote == datos_lote["numero_lote"])
+        stmt_batch = select(Batch).where(
+            (Batch.supply_id == db_supply.id) & (Batch.batch_number == batch_data["batch_number"])
         )
-        resultado_lote = await session.execute(stmt_lote)
-        lote_existente = resultado_lote.scalar_one_or_none()
+        result_batch = await session.execute(stmt_batch)
+        existing_batch = result_batch.scalar_one_or_none()
 
-        # 3. Si no existe, crearlo
-        if not lote_existente:
-            nuevo_lote = Lote(
-                insumo_id=insumo_db.id,
-                numero_lote=datos_lote["numero_lote"],
-                fecha_vencimiento=datos_lote.get("fecha_vencimiento"),
-                stock_actual=datos_lote["stock_actual"],
+        if not existing_batch:
+            new_batch = Batch(
+                supply_id=db_supply.id,
+                batch_number=batch_data["batch_number"],
+                expiration_date=batch_data.get("expiration_date"),
+                current_stock=batch_data["current_stock"],
             )
-            session.add(nuevo_lote)
-            print(f"[+] Lote ingresado: {datos_lote['numero_lote']}")
+            session.add(new_batch)
+            print(f"[+] Batch entered: {batch_data['batch_number']}")
         else:
-            print(f"[=] Lote ya existe: {datos_lote['numero_lote']}")
+            print(f"[=] Batch already exists: {batch_data['batch_number']}")
 
     await session.commit()
 
-async def seed_pacientes(session: AsyncSession):
-    print("--- Abriendo Admisiones: Ingresando Pacientes Base ---")
+async def seed_patients(session: AsyncSession):
+    print("--- Opening Admissions: Entering Base Patients ---")
     
-    # 1. Tomamos nuestra libreta de apuntes (PACIENTES_BASE) y leemos paciente por paciente
-    for datos_paciente in PACIENTES_BASE:
+    for patient_data in BASE_PATIENTS:
         
-        # 2. Vamos al archivo del hospital y buscamos si ya existe la cédula
-        stmt = select(Paciente).where(Paciente.cedula == datos_paciente["cedula"])
-        resultado = await session.execute(stmt)
-        paciente_existente = resultado.scalar_one_or_none()
+        stmt = select(Patient).where(Patient.national_id == patient_data["national_id"])
+        result = await session.execute(stmt)
+        existing_patient = result.scalar_one_or_none()
         
-        # 3. Si el paciente es nuevo (no existe)
-        if not paciente_existente:
-            # Creamos la carpeta oficial del hospital desempaquetando nuestra libreta (**)
-            nuevo_paciente = Paciente(**datos_paciente)
+        if not existing_patient:
+            new_patient = Patient(**patient_data)
             
-            # Ponemos la carpeta en la bandeja del recepcionista
-            session.add(nuevo_paciente)
-            print(f"[+] Paciente admitido: {datos_paciente['nombre_completo']}")
+            session.add(new_patient)
+            print(f"[+] Patient admitted: {patient_data['full_name']}")
         else:
-            print(f"[=] Paciente ya tiene historia abierta: {datos_paciente['nombre_completo']}")
+            print(f"[=] Patient already has an open clinical history: {patient_data['full_name']}")
             
-    # 4. El jefe de admisiones firma y guarda todo en el archivo de metal
     await session.commit()
 
 # ==========================================
-# 3. BLOQUE DE EJECUCIÓN PRINCIPAL
+# 3. MAIN EXECUTION BLOCK
 # ==========================================
 
 async def run_seed():
-    print("Iniciando proceso de Seeding...")
+    print("Starting Seeding process...")
     async with AsyncSessionLocal() as session:
-        # El orden es ESTRICTO: primero permisos, luego roles, luego usuarios
-        await seed_permisos(session)
+        # STRICT ORDER: first permissions, then roles, then users
+        await seed_permissions(session)
         await seed_roles(session)
         await seed_admin(session)
-        await seed_pacientes(session)
-        await seed_insumos(session)
-        await seed_lotes(session)
-    print("Proceso de Seeding finalizado con éxito.")
+        await seed_patients(session)
+        await seed_supplies(session)
+        await seed_batches(session)
+    print("Seeding process successfully finished.")
     
 
 if __name__ == "__main__":
     asyncio.run(run_seed())
-

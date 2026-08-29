@@ -6,17 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.core.security import (
-    crear_access_token,
-    crear_refresh_token,
-    decodificar_token,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
     verify_password,
 )
-from app.models import Usuario
+from app.models import User
 from app.schemas import TokenResponse, RefreshRequest 
 
 router = APIRouter(
     prefix="/auth",
-    tags=["Autenticación"]
+    tags=["Authentication"]
 )
 
 
@@ -25,30 +25,30 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
-    # 1. Buscar al usuario por su username
-    resultado = await db.execute(
-        select(Usuario).where(Usuario.username == form_data.username)
+    # 1. Search for the user by username
+    result = await db.execute(
+        select(User).where(User.username == form_data.username)
     )
-    usuario = resultado.scalar_one_or_none()
+    user = result.scalar_one_or_none()
 
-    # 2. Verificar credenciales (usuario + contraseña)
-    if not usuario or not verify_password(form_data.password, usuario.hashed_password):
+    # 2. Verify credentials
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario o contraseña incorrectos.",
+            detail="Incorrect username or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. Verificar que la cuenta esté activa
-    if not usuario.activo:
+    # 3. Verify the account is active
+    if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Usuario inactivo.",
+            detail="Inactive user.",
         )
 
-    # 4. Emitir el gafete (access) y la credencial (refresh)
-    access_token = crear_access_token(usuario.username)
-    refresh_token = crear_refresh_token(usuario.username)
+    # 4. Issue the access token and refresh token
+    access_token = create_access_token(user.username)
+    refresh_token = create_refresh_token(user.username)
 
     return TokenResponse(
         access_token=access_token,
@@ -57,25 +57,25 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def renovar_sesion(
-    solicitud: RefreshRequest,
+async def refresh_session(
+    request: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    # 1. Validar y decodificar el refresh token
+    # 1. Validate and decode the refresh token
     try:
-        payload = decodificar_token(solicitud.refresh_token)
+        payload = decode_token(request.refresh_token)
     except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token inválido o expirado.",
+            detail="Invalid or expired refresh token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 2. Verificar que sea de tipo "refresh"
+    # 2. Verify it is a "refresh" token
     if payload.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de tipo incorrecto.",
+            detail="Incorrect token type.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -83,27 +83,27 @@ async def renovar_sesion(
     if username is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token sin sujeto.",
+            detail="Token without subject.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. Confirmar que el usuario siga existiendo y activo
-    resultado = await db.execute(
-        select(Usuario).where(Usuario.username == username)
+    # 3. Confirm the user still exists and is active
+    result = await db.execute(
+        select(User).where(User.username == username)
     )
-    usuario = resultado.scalar_one_or_none()
-    if not usuario or not usuario.activo:
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario no encontrado o inactivo.",
+            detail="User not found or inactive.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 4. Emitir un nuevo access (y refresh) sin pedir re-login
-    nuevo_access = crear_access_token(usuario.username)
-    nuevo_refresh = crear_refresh_token(usuario.username)
+    # 4. Issue a new access (and refresh) token
+    new_access = create_access_token(user.username)
+    new_refresh = create_refresh_token(user.username)
 
     return TokenResponse(
-        access_token=nuevo_access,
-        refresh_token=nuevo_refresh,
+        access_token=new_access,
+        refresh_token=new_refresh,
     )

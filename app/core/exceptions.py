@@ -9,19 +9,19 @@ logger = logging.getLogger("farmacia-quirurgica")
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
-    async def validacion_handler(request: Request, exc: RequestValidationError):
+    async def validation_handler(request: Request, exc: RequestValidationError):
         return JSONResponse(
             status_code=422,
             content={
-                "detail": "Error de validación en los datos enviados.",
-                "errores": exc.errors(),
+                "detail": "Validation error in the submitted data.",
+                "errors": exc.errors(),
             },
         )
 
     @app.exception_handler(Exception)
-    async def error_generico_handler(request: Request, exc: Exception):
-        logger.exception("Error no controlado: %s", exc)
+    async def generic_error_handler(request: Request, exc: Exception):
+        logger.exception("Unhandled error: %s", exc)
         return JSONResponse(
             status_code=500,
-            content={"detail": "Error interno del servidor."},
+            content={"detail": "Internal server error."},
         )
