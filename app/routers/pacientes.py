@@ -8,7 +8,7 @@ from app.api.deps import get_db
 from app.schemas.paciente import PacienteCreate, PacienteResponse
 
 # Importamos el modelo de la base de datos (la representación de la tabla)
-from app.models.orm.clinica import Paciente
+from app.models import Paciente
 
 router = APIRouter(
     prefix="/pacientes",

@@ -3,8 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user, get_db, require_permission
-from app.models.orm.inventario import Insumo, RetiroInsumo, DevolucionInsumo, Lote
-from app.models.orm.rbac import Usuario
+from app.models import Insumo, RetiroInsumo, DevolucionInsumo, Lote, Usuario
 from datetime import date
  
 
