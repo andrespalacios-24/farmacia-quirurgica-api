@@ -12,7 +12,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models import Usuario
-from app.schemas.auth import TokenResponse, RefreshRequest
+from app.schemas import TokenResponse, RefreshRequest 
 
 router = APIRouter(
     prefix="/auth",

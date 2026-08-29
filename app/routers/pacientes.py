@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.api.deps import get_db
 
 # Importamos los esquemas (filtros estrictos de entrada/salida)
-from app.schemas.paciente import PacienteCreate, PacienteResponse
+from app.schemas import PacienteCreate, PacienteResponse
 
 # Importamos el modelo de la base de datos (la representación de la tabla)
 from app.models import Paciente

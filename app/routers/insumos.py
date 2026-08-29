@@ -7,7 +7,7 @@ from app.models import Insumo, RetiroInsumo, DevolucionInsumo, Lote, Usuario
 from datetime import date
  
 
-from app.schemas.insumo import (
+from app.schemas import (
     RetiroInsumoCreate,
     InsumoCreate,
     InsumoResponse,
