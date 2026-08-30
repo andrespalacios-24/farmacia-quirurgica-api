@@ -1,5 +1,5 @@
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 
 from app.main import app
 from app.core.i18n import i18n
@@ -14,19 +14,19 @@ async def test_i18n_spanish_default():
     # Using an invalid ID format to trigger validation error or a non-existent endpoint for 404
     # To test DomainException, we need an endpoint that raises it.
     # We will test validation error here as a proxy if we don't have a reliable mock endpoint.
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Invalid payload to force a 422 RequestValidationError
-        response = await client.post("/api/v1/auth/login", json={"bad": "data"})
+        response = await client.post("/patients/", json={})
     
     assert response.status_code == 422
     assert "Error de validación" in response.json()["detail"]
 
 @pytest.mark.asyncio
 async def test_i18n_english_header():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
-            "/api/v1/auth/login", 
-            json={"bad": "data"},
+            "/patients/",
+            json={},
             headers={"Accept-Language": "en"}
         )
     
@@ -35,11 +35,11 @@ async def test_i18n_english_header():
 
 @pytest.mark.asyncio
 async def test_i18n_fallback_to_spanish():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Request French, should fallback to Spanish
         response = await client.post(
-            "/api/v1/auth/login", 
-            json={"bad": "data"},
+            "/patients/",
+            json={},
             headers={"Accept-Language": "fr"}
         )
     
