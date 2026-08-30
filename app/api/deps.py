@@ -1,7 +1,7 @@
 from typing import AsyncGenerator
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,3 +88,20 @@ def require_permission(permission_code: str):
         return user
 
     return verify_permission
+
+async def get_locale(accept_language: str | None = Header(default=None)) -> str:
+    """
+    FastAPI dependency to extract and sanitize the requested language.
+    Returns 'es' by default if the header is missing or unsupported.
+    """
+    if not accept_language:
+        return "es"
+    
+    # Very basic parsing: just take the first two letters of the primary language
+    # E.g., "en-US,en;q=0.9" -> "en"
+    primary_lang = accept_language.split(",")[0].split("-")[0].strip().lower()
+    
+    if primary_lang in ["es", "en"]:
+        return primary_lang
+        
+    return "es"
