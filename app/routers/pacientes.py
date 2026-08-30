@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 # Importamos nuestro circulante (la dependencia)
-from app.api.deps import get_db
+from app.api.deps import DbSession
 
 # Importamos los esquemas (filtros estrictos de entrada/salida)
 from app.schemas import PacienteCreate, PacienteResponse
@@ -15,7 +14,7 @@ router = APIRouter(
     tags=["Pacientes"]
 )
 @router.post("/", response_model=PacienteResponse, status_code=status.HTTP_201_CREATED)
-async def registrar_paciente(paciente_in: PacienteCreate, db: AsyncSession = Depends(get_db)):
+async def registrar_paciente(paciente_in: PacienteCreate, db: DbSession):
     nuevo_paciente = Paciente(**paciente_in.model_dump())
     db.add(nuevo_paciente)
     await db.commit()
@@ -23,7 +22,7 @@ async def registrar_paciente(paciente_in: PacienteCreate, db: AsyncSession = Dep
     return nuevo_paciente
 
 @router.get("/", response_model=list[PacienteResponse], status_code=status.HTTP_200_OK)
-async def obtener_pacientes(db: AsyncSession = Depends(get_db)):
+async def obtener_pacientes(db: DbSession):
     
     # 1. Preparamos la solicitud al archivo (Armamos el Query)
     query = select(Paciente)
@@ -38,7 +37,7 @@ async def obtener_pacientes(db: AsyncSession = Depends(get_db)):
     return pacientes_encontrados
 
 @router.get("/{cedula}", response_model=PacienteResponse, status_code=status.HTTP_200_OK)
-async def obtener_paciente_por_cedula(cedula: str, db: AsyncSession = Depends(get_db)):
+async def obtener_paciente_por_cedula(cedula: str, db: DbSession):
     
     # 1. Armamos el query: "Selecciona el paciente DONDE la cédula coincida"
     query = select(Paciente).where(Paciente.cedula == cedula)

@@ -2,9 +2,9 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+
+from app.api.deps import DbSession
 from app.core.security import (
     crear_access_token,
     crear_refresh_token,
@@ -22,8 +22,8 @@ router = APIRouter(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
+    db: DbSession,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db),
 ):
     # 1. Buscar al usuario por su username
     resultado = await db.execute(
@@ -59,7 +59,7 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def renovar_sesion(
     solicitud: RefreshRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
 ):
     # 1. Validar y decodificar el refresh token
     try:

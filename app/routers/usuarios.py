@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, require_permission
+from app.api.deps import DbSession, require_permission
 from app.core.security import hash_password
 from app.models import Usuario, Rol
 from app.schemas import UsuarioCreate, UsuarioResponse
@@ -17,7 +16,7 @@ router = APIRouter(
 @router.post("/", response_model=UsuarioResponse, status_code=status.HTTP_201_CREATED)
 async def crear_usuario(
     datos: UsuarioCreate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
     usuario_actual: Usuario = Depends(require_permission("usuarios:crear")),
 ):
     # 1. Verificar que username y email no estén en uso

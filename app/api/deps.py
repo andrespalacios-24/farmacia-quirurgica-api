@@ -1,4 +1,4 @@
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Annotated
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -88,3 +88,6 @@ def require_permission(codigo_permiso: str):
         return usuario
 
     return verificar_permiso
+
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[Usuario, Depends(get_current_user)]

@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 # Importamos nuestro circulante (la dependencia)
-from app.api.deps import get_db
+from app.api.deps import DbSession
 # Importamos la anatomía (Modelos DB)
 from app.models import Procedimiento, Paciente
 # Importamos el instrumental (Esquemas Pydantic)
@@ -18,7 +17,7 @@ router = APIRouter(
 @router.post("/", response_model=ProcedimientoResponse, status_code=status.HTTP_201_CREATED)
 async def registrar_procedimiento(
     procedimiento_in: ProcedimientoCreate, 
-    db: AsyncSession = Depends(get_db)
+    db: DbSession
 ):
     # 1. Pausa de Seguridad (Time Out): Verificar que el paciente realmente existe
     resultado = await db.execute(select(Paciente).where(Paciente.id == procedimiento_in.paciente_id))
@@ -50,7 +49,7 @@ async def registrar_procedimiento(
 # GET: Listar todos los procedimientos (La Pizarra del Quirófano)
 # -------------------------------------------------------------------
 @router.get("/", response_model=list[ProcedimientoResponse], status_code=status.HTTP_200_OK)
-async def obtener_procedimientos(db: AsyncSession = Depends(get_db)):
+async def obtener_procedimientos(db: DbSession):
     
     # 1. Preparar la solicitud de búsqueda
     consulta = select(Procedimiento).options(selectinload(Procedimiento.paciente))
