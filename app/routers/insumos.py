@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from app.api.deps import get_current_user, get_db, require_permission
+from app.api.deps import DbSession, CurrentUser, require_permission
 from app.models import Insumo, RetiroInsumo, DevolucionInsumo, Lote, Usuario
 from datetime import date
  
@@ -31,7 +30,7 @@ router = APIRouter(
 @router.post("/retiros", status_code=status.HTTP_201_CREATED)
 async def procesar_retiro(
     vale_farmacia: RetiroInsumoCreate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
     usuario: Usuario = Depends(require_permission("insumos:retirar")),
 ):
     # 1. Buscar el lote en el estante
@@ -86,11 +85,11 @@ async def procesar_retiro(
 # -------------------------------------------------------------------
 @router.get("/", response_model=list[InsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_kardex(
+    db: DbSession,
+    usuario: CurrentUser,
     bajo_stock: bool = False,
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
 ):
     # 1. Cargar todos los insumos con sus lotes
     consulta = select(Insumo).options(selectinload(Insumo.lotes))
@@ -113,7 +112,7 @@ async def listar_kardex(
 @router.post("/", response_model=InsumoResponse, status_code=status.HTTP_201_CREATED)
 async def crear_insumo(
     datos: InsumoCreate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
     usuario_actual: Usuario = Depends(require_permission("insumos:crear")),
 ):
     # 1. Verificar que el código de barras no exista ya
@@ -150,7 +149,7 @@ async def crear_insumo(
 @router.post("/lotes", response_model=LoteResumen, status_code=status.HTTP_201_CREATED)
 async def crear_lote(
     datos: LoteCreate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
     usuario_actual: Usuario = Depends(require_permission("insumos:crear")),
 ):
     # 1. Verificar que el insumo (producto) exista
@@ -186,7 +185,7 @@ async def crear_lote(
 @router.post("/devoluciones", response_model=DevolucionInsumoResponse, status_code=status.HTTP_201_CREATED)
 async def registrar_devolucion(
     vale_devolucion: DevolucionInsumoCreate,
-    db: AsyncSession = Depends(get_db),
+    db: DbSession,
     usuario: Usuario = Depends(require_permission("insumos:devolver"))
 ):
     # 1. Buscar el retiro original (con su lote cargado)
@@ -254,10 +253,10 @@ async def registrar_devolucion(
 
 @router.get("/retiros", response_model=list[RetiroInsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_retiros(
+    db: DbSession,
+    usuario: CurrentUser,
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
 ):
     # 1. Consultar retiros con carga ansiosa y paginación
     consulta = select(RetiroInsumo).options(
@@ -281,10 +280,10 @@ async def listar_retiros(
 # -------------------------------------------------------------------
 @router.get("/devoluciones", response_model=list[DevolucionInsumoResponse], status_code=status.HTTP_200_OK)
 async def listar_devoluciones(
+    db: DbSession,
+    usuario: CurrentUser,
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
 ):
     # 1. Consultar devoluciones con carga ansiosa y paginación
     consulta = select(DevolucionInsumo).options(
@@ -307,8 +306,8 @@ async def listar_devoluciones(
 @router.get("/{codigo_barras}", response_model=InsumoResponse, status_code=status.HTTP_200_OK)
 async def buscar_por_codigo(
     codigo_barras: str,
-    db: AsyncSession = Depends(get_db),
-    usuario: Usuario = Depends(get_current_user),
+    db: DbSession,
+    usuario: CurrentUser,
 ):
     resultado = await db.execute(
         select(Insumo)
