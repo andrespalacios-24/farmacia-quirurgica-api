@@ -14,3 +14,9 @@ __pycache__/
 
 # Archivos de configuración de VS Code
 .vscode/
+
+
+.opencode
+.instrucciones_agente.md
+.agents
+.specify

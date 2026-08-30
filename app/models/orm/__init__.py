@@ -1,19 +1,18 @@
-from app.models.orm.rbac import Base, Permiso, Rol, Usuario, usuario_rol, rol_permiso
-from app.models.orm.inventario import Insumo, Lote, RetiroInsumo, DevolucionInsumo
-from app.models.orm.clinica import Paciente, Procedimiento
+from app.models.orm.rbac import Base, Permission, Role, User, user_role, role_permission
+from app.models.orm.inventario import Supply, Batch, SupplyWithdrawal, SupplyReturn
+from app.models.orm.clinica import Patient, Procedure
 
 __all__ = [
     "Base",
-    "Permiso",
-    "Rol",
-    "Usuario",
-    "usuario_rol",
-    "rol_permiso",
-    "Insumo",
-    "Lote",
-    "RetiroInsumo",
-    "DevolucionInsumo",
-    "Paciente",
-    "Procedimiento",
+    "Permission",
+    "Role",
+    "User",
+    "user_role",
+    "role_permission",
+    "Supply",
+    "Batch",
+    "SupplyWithdrawal",
+    "SupplyReturn",
+    "Patient",
+    "Procedure",
 ]
-

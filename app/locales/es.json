@@ -1,0 +1,12 @@
+{
+  "errors": {
+    "not_found": "{entity_name} con ID {entity_id} no encontrado.",
+    "business_logic": "Violación de regla de negocio: {detail}",
+    "insumo_agotado": "El insumo '{insumo_name}' está agotado.",
+    "validation": "Error de validación en los datos enviados.",
+    "internal": "Error interno del servidor."
+  },
+  "messages": {
+    "welcome": "Bienvenido a la API de Farmacia Quirúrgica"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "errors": {
+    "not_found": "{entity_name} with ID {entity_id} not found.",
+    "business_logic": "Business rule violation: {detail}",
+    "insumo_agotado": "The supply '{insumo_name}' is out of stock.",
+    "validation": "Validation error in the submitted data.",
+    "internal": "Internal server error."
+  },
+  "messages": {
+    "welcome": "Welcome to the Surgical Pharmacy API"
+  }
+}

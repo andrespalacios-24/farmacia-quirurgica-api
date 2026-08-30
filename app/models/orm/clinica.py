@@ -5,28 +5,28 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 if TYPE_CHECKING:
-    from app.models.orm.inventario import RetiroInsumo
+    from app.models.orm.inventario import SupplyWithdrawal
 
-class Paciente(Base):
+class Patient(Base):
     __tablename__ = "pacientes"
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    cedula: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
-    nombre_completo: Mapped[str] = mapped_column(String(150), nullable=False)
+    national_id: Mapped[str] = mapped_column("cedula", String(20), unique=True, index=True, nullable=False)
+    full_name: Mapped[str] = mapped_column("nombre_completo", String(150), nullable=False)
     
-    # Relación 1:N - Un paciente puede tener muchos procedimientos (ej. reintervenciones)
-    procedimientos: Mapped[List["Procedimiento"]] = relationship("Procedimiento", back_populates="paciente")
+    # 1:N Relationship - A patient can have many procedures
+    procedures: Mapped[List["Procedure"]] = relationship("Procedure", back_populates="patient")
 
-class Procedimiento(Base):
+class Procedure(Base):
     __tablename__ = "procedimientos"
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    paciente_id: Mapped[int] = mapped_column(ForeignKey("pacientes.id", ondelete="RESTRICT"), nullable=False)
-    descripcion: Mapped[str] = mapped_column(String(255), nullable=False) # Ej: "Apendicectomía", "Lavado Quirúrgico"
-    quirofano: Mapped[str] = mapped_column(String(50), nullable=False)
+    patient_id: Mapped[int] = mapped_column("paciente_id", ForeignKey("pacientes.id", ondelete="RESTRICT"), nullable=False)
+    description: Mapped[str] = mapped_column("descripcion", String(255), nullable=False) # Ex: "Appendectomy"
+    operating_room: Mapped[str] = mapped_column("quirofano", String(50), nullable=False)
     
-    fecha_procedimiento: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    procedure_date: Mapped[datetime] = mapped_column("fecha_procedimiento", DateTime(timezone=True), server_default=func.now(), nullable=False)
     
-    # Relaciones
-    paciente: Mapped["Paciente"] = relationship("Paciente", back_populates="procedimientos")
-    retiros: Mapped[List["RetiroInsumo"]] = relationship("RetiroInsumo", back_populates="procedimiento")
+    # Relationships
+    patient: Mapped["Patient"] = relationship("Patient", back_populates="procedures")
+    withdrawals: Mapped[List["SupplyWithdrawal"]] = relationship("SupplyWithdrawal", back_populates="procedure")
