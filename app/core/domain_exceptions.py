@@ -2,7 +2,7 @@ from typing import Any
 
 class DomainException(Exception):
     """
-    Excepción base para toda la lógica de negocio (El 'Paciente' principal de los errores).
+    Base exception for all business logic.
     """
     def __init__(self, key: str, status_code: int = 400, **kwargs: Any):
         self.key = key
@@ -12,15 +12,15 @@ class DomainException(Exception):
 
 class NotFoundError(DomainException):
     """
-    Equivalente a buscar instrumental que no está en la mesa de mayo.
+    Equivalent to searching for an instrument that is not on the instrument table.
     """
     def __init__(self, entity_name: str, entity_id: str | int):
         super().__init__("errors.not_found", status_code=404, entity_name=entity_name, entity_id=entity_id)
 
 class BusinessLogicError(DomainException):
     """
-    Equivalente a una incompatibilidad clínica (ej. estéril vs contaminado).
-    Violación de reglas de negocio.
+    Equivalent to a clinical incompatibility (e.g., sterile vs contaminated).
+    Violation of business rules.
     """
     def __init__(self, detail: str):
         super().__init__("errors.business_logic", status_code=409, detail=detail)

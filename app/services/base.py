@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.core.domain_exceptions import NotFoundError
 
-# Type variables para modelos SQLAlchemy y esquemas Pydantic
+# Type variables for SQLAlchemy models and Pydantic schemas
 ModelType = TypeVar("ModelType")
 CreateSchemaType = TypeVar("CreateSchemaType")
 UpdateSchemaType = TypeVar("UpdateSchemaType")
@@ -13,8 +13,8 @@ UpdateSchemaType = TypeVar("UpdateSchemaType")
 
 class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     """
-    Clase base para todos los servicios de negocio (La "Central de Esterilización").
-    Provee operaciones CRUD comunes que pueden ser extendidas o sobreescritas por servicios específicos.
+    Base class for all business services (the "Central Sterilization").
+    Provides common CRUD operations that can be extended or overridden by specific services.
     """
 
     def __init__(self, session: AsyncSession, model: Type[ModelType]):
@@ -32,11 +32,11 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         return obj
 
     async def create(self, obj_in: CreateSchemaType) -> ModelType:
-        # Nota: Asume que obj_in es un esquema de Pydantic
+        # Note: Assumes obj_in is a Pydantic schema
         obj_in_data = obj_in.model_dump()
         db_obj = self.model(**obj_in_data)
         self.session.add(db_obj)
-        # El router o manejador de dependencias hace el commit final,
-        # pero podemos hacer un flush para obtener el ID si es necesario.
+        # The router or dependency handler performs the final commit,
+        # but we can flush to get the ID if needed.
         await self.session.flush()
         return db_obj
