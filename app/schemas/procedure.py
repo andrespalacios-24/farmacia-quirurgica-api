@@ -3,9 +3,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from enum import Enum
 
 class OperatingRoom(str, Enum):
-    OR_1 = "Operating Room 1"
-    OR_2 = "Operating Room 2"
-    OR_3 = "Operating Room 3"  
+    OR_1 = "Quirófano 1"
+    OR_2 = "Quirófano 2"
+    OR_3 = "Quirófano 3"
 
 class ProcedureBase(BaseModel):
     description: str = Field(..., max_length=255, examples=["Appendectomy", "Laparoscopic Cholecystectomy"])
