@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.api.deps import DbSession, CurrentUser, require_permission
+from app.core.domain_exceptions import DomainException
 from app.models import Supply, SupplyWithdrawal, SupplyReturn, Batch, User
 from datetime import date
  
@@ -35,22 +36,13 @@ async def process_withdrawal(
     batch_db = result_batch.scalar_one_or_none()
 
     if not batch_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Error: The indicated batch does not exist."
-        )
+        raise DomainException("errors.batch_not_found", status_code=404)
 
     if batch_db.expiration_date is not None and batch_db.expiration_date.date() < date.today():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The batch is expired and cannot be withdrawn.",
-        )
+        raise DomainException("errors.batch_expired", status_code=400)
 
     if batch_db.current_stock < withdrawal_voucher.withdrawn_quantity:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Insufficient stock in the batch. Only {batch_db.current_stock} units available."
-        )
+        raise DomainException("errors.insufficient_stock", status_code=400, units=batch_db.current_stock)
 
     batch_db.current_stock -= withdrawal_voucher.withdrawn_quantity
 
@@ -101,10 +93,7 @@ async def create_supply(
         select(Supply).where(Supply.barcode == data.barcode)
     )
     if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The barcode is already registered.",
-        )
+        raise DomainException("errors.barcode_already_registered", status_code=409)
 
     new_supply = Supply(**data.model_dump())
 
@@ -132,16 +121,10 @@ async def create_batch(
         select(Supply).where(Supply.id == data.supply_id)
     )
     if not result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="The indicated supply does not exist.",
-        )
+        raise DomainException("errors.supply_not_found", status_code=404)
 
     if data.expiration_date is not None and data.expiration_date.date() < date.today():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The expiration date cannot be in the past.",
-        )
+        raise DomainException("errors.expiration_date_in_past", status_code=400)
 
     new_batch = Batch(**data.model_dump())
 
@@ -166,10 +149,7 @@ async def register_return(
     withdrawal_db = result_withdrawal.scalar_one_or_none()
 
     if not withdrawal_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Error: The original withdrawal does not exist in the system."
-        )
+        raise DomainException("errors.withdrawal_not_found", status_code=404)
 
     sum_result = await db.execute(
         select(func.coalesce(func.sum(SupplyReturn.returned_quantity), 0)).where(
@@ -179,10 +159,7 @@ async def register_return(
     already_returned = sum_result.scalar() or 0
 
     if already_returned + return_voucher.returned_quantity > withdrawal_db.withdrawn_quantity:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"The return exceeds the withdrawn amount. Already returned: {already_returned}, withdrawn: {withdrawal_db.withdrawn_quantity}."
-        )
+        raise DomainException("errors.return_exceeds_withdrawal", status_code=400, already_returned=already_returned, withdrawn=withdrawal_db.withdrawn_quantity)
 
     if return_voucher.supply_status == SupplyStatus.STERILE_INTACT:
         withdrawal_db.batch.current_stock += return_voucher.returned_quantity
@@ -262,9 +239,6 @@ async def search_by_barcode(
     supply = result.scalar_one_or_none()
 
     if not supply:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No supply found with that barcode.",
-        )
+        raise DomainException("errors.supply_not_found_by_barcode", status_code=404)
 
     return supply

@@ -20,3 +20,18 @@ class UserResponse(UserBase):
     id: int
     roles: list[RoleSummary] = []
     model_config = ConfigDict(from_attributes=True)
+
+class PermissionSummary(BaseModel):
+    id: int
+    code: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RoleWithPermissions(RoleSummary):
+    permissions: list[PermissionSummary] = []
+
+
+class MeResponse(UserBase):
+    id: int
+    roles: list[RoleWithPermissions] = []
+    model_config = ConfigDict(from_attributes=True)

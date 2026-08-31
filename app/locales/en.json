@@ -2,9 +2,31 @@
   "errors": {
     "not_found": "{entity_name} with ID {entity_id} not found.",
     "business_logic": "Business rule violation: {detail}",
-    "insumo_agotado": "The supply '{insumo_name}' is out of stock.",
+    "supply_out_of_stock": "The supply '{supply_name}' is out of stock.",
     "validation": "Validation error in the submitted data.",
-    "internal": "Internal server error."
+    "internal": "Internal server error.",
+    "invalid_credentials": "Incorrect username or password.",
+    "inactive_user": "Inactive user.",
+    "invalid_or_expired_token": "Invalid or expired token.",
+    "incorrect_token_type": "Incorrect token type.",
+    "token_without_subject": "Token without subject.",
+    "user_not_found_or_inactive": "User not found or inactive.",
+    "invalid_or_expired_refresh_token": "Invalid or expired refresh token.",
+    "not_authenticated": "Not authenticated.",
+    "permission_denied": "Permission denied: requires '{permission_code}'.",
+    "patient_not_found": "Clinical history not found for ID {national_id}.",
+    "patient_not_in_system": "The indicated patient is not found in the system.",
+    "batch_not_found": "The indicated batch does not exist.",
+    "batch_expired": "The batch is expired and cannot be withdrawn.",
+    "insufficient_stock": "Insufficient stock in the batch. Only {units} units available.",
+    "barcode_already_registered": "The barcode is already registered.",
+    "supply_not_found": "The indicated supply does not exist.",
+    "expiration_date_in_past": "The expiration date cannot be in the past.",
+    "withdrawal_not_found": "The original withdrawal does not exist in the system.",
+    "return_exceeds_withdrawal": "The return exceeds the withdrawn amount. Already returned: {already_returned}, withdrawn: {withdrawn}.",
+    "supply_not_found_by_barcode": "No supply found with that barcode.",
+    "username_or_email_taken": "The username or email is already registered.",
+    "roles_do_not_exist": "One or more roles do not exist."
   },
   "messages": {
     "welcome": "Welcome to the Surgical Pharmacy API"

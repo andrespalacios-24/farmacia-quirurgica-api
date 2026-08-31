@@ -1,12 +1,13 @@
 from typing import AsyncGenerator, Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, status, Header
+from fastapi import Depends, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.domain_exceptions import DomainException
 from app.core.security import decode_token
 from app.database import AsyncSessionLocal
 from app.models import User, Role
@@ -18,39 +19,30 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 # OAuth2 schema: this provides the "Authorize" button in Swagger
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    token: str | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    if token is None:
+        raise DomainException("errors.not_authenticated", status_code=401)
+
     # 1. Decode the token (validates signature and expiration)
     try:
         payload = decode_token(token)
     except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.invalid_or_expired_token", status_code=401)
 
     # 2. Verify it is an "access" token
     if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect token type.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.incorrect_token_type", status_code=401)
 
     # 3. Extract the user (subject) from the token
     username = payload.get("sub")
     if username is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token without subject.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.token_without_subject", status_code=401)
 
     # 4. Load the user with their roles and permissions (eager loading)
     query = (
@@ -62,11 +54,7 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.user_not_found_or_inactive", status_code=401)
 
     return user
 
@@ -81,10 +69,7 @@ def require_permission(permission_code: str):
         }
 
         if permission_code not in user_permissions:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission denied: requires '{permission_code}'.",
-            )
+            raise DomainException("errors.permission_denied", status_code=403, permission_code=permission_code)
         return user
 
     return verify_permission
