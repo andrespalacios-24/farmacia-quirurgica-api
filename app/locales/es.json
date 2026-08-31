@@ -12,6 +12,7 @@
     "token_without_subject": "Token sin sujeto.",
     "user_not_found_or_inactive": "Usuario no encontrado o inactivo.",
     "invalid_or_expired_refresh_token": "Refresh token inválido o expirado.",
+    "not_authenticated": "No autenticado.",
     "permission_denied": "Permiso denegado: se requiere '{permission_code}'.",
     "patient_not_found": "No se encontró historia clínica para la cédula {national_id}.",
     "patient_not_in_system": "El paciente indicado no se encuentra en el sistema.",

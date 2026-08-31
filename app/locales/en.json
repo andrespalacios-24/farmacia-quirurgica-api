@@ -12,6 +12,7 @@
     "token_without_subject": "Token without subject.",
     "user_not_found_or_inactive": "User not found or inactive.",
     "invalid_or_expired_refresh_token": "Invalid or expired refresh token.",
+    "not_authenticated": "Not authenticated.",
     "permission_denied": "Permission denied: requires '{permission_code}'.",
     "patient_not_found": "Clinical history not found for ID {national_id}.",
     "patient_not_in_system": "The indicated patient is not found in the system.",

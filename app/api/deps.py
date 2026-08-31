@@ -19,13 +19,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 # OAuth2 schema: this provides the "Authorize" button in Swagger
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    token: str | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    if token is None:
+        raise DomainException("errors.not_authenticated", status_code=401)
+
     # 1. Decode the token (validates signature and expiration)
     try:
         payload = decode_token(token)
