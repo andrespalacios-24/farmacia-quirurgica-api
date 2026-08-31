@@ -1,9 +1,10 @@
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 
 from app.api.deps import DbSession, CurrentUser
+from app.core.domain_exceptions import DomainException
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -32,18 +33,11 @@ async def login(
 
     # 2. Verify credentials
     if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.invalid_credentials", status_code=401)
 
     # 3. Verify the account is active
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user.",
-        )
+        raise DomainException("errors.inactive_user", status_code=403)
 
     # 4. Issue the access token and refresh token
     access_token = create_access_token(user.username)
@@ -64,27 +58,15 @@ async def refresh_session(
     try:
         payload = decode_token(request.refresh_token)
     except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.invalid_or_expired_refresh_token", status_code=401)
 
     # 2. Verify it is a "refresh" token
     if payload.get("type") != "refresh":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect token type.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.incorrect_token_type", status_code=401)
 
     username = payload.get("sub")
     if username is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token without subject.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.token_without_subject", status_code=401)
 
     # 3. Confirm the user still exists and is active
     result = await db.execute(
@@ -92,11 +74,7 @@ async def refresh_session(
     )
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise DomainException("errors.user_not_found_or_inactive", status_code=401)
 
     # 4. Issue a new access (and refresh) token
     new_access = create_access_token(user.username)

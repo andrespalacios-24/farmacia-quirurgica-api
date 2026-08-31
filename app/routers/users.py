@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, require_permission
+from app.core.domain_exceptions import DomainException
 from app.core.security import hash_password
 from app.models import User, Role
 from app.schemas import UserCreate, UserResponse
@@ -25,10 +26,7 @@ async def create_user(
     )
     result = await db.execute(existing_query)
     if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The username or email is already registered.",
-        )
+        raise DomainException("errors.username_or_email_taken", status_code=409)
 
     # 2. Search for the requested roles by name
     if data.roles:
@@ -36,10 +34,7 @@ async def create_user(
         roles_result = await db.execute(roles_query)
         db_roles = list(roles_result.scalars().all())
         if len(db_roles) != len(data.roles):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="One or more roles do not exist.",
-            )
+            raise DomainException("errors.roles_do_not_exist", status_code=400)
     else:
         db_roles = []
 

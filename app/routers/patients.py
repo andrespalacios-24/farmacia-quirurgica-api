@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from sqlalchemy import select
 from app.api.deps import DbSession
+from app.core.domain_exceptions import DomainException
 
 from app.schemas import PatientCreate, PatientResponse
 from app.models import Patient
@@ -32,9 +33,6 @@ async def get_patient_by_national_id(national_id: str, db: DbSession):
     patient_found = result.scalar_one_or_none()
     
     if not patient_found:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Clinical history not found for ID {national_id}"
-        )
+        raise DomainException("errors.patient_not_found", status_code=404, national_id=national_id)
     
     return patient_found

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from sqlalchemy import select
 from app.api.deps import DbSession
+from app.core.domain_exceptions import DomainException
 from app.models import Procedure, Patient
 from app.schemas import ProcedureCreate, ProcedureResponse
 from sqlalchemy.orm import selectinload
@@ -19,10 +20,7 @@ async def register_procedure(
     patient_db = result.scalar_one_or_none()
     
     if not patient_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Error: The indicated patient is not found in the system."
-        )
+        raise DomainException("errors.patient_not_in_system", status_code=404)
 
     new_procedure = Procedure(**procedure_in.model_dump())
     

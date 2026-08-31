@@ -16,9 +16,11 @@ def register_exception_handlers(app: FastAPI) -> None:
         locale = get_locale_from_header(request.headers.get("accept-language"))
         translated_msg = i18n.translate(exc.key, locale, **exc.kwargs)
         logger.warning(f"Domain exception: {translated_msg}")
+        headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == 401 else None
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": translated_msg},
+            headers=headers,
         )
 
     @app.exception_handler(RequestValidationError)
